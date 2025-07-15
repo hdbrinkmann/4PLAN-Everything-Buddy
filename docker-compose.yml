@@ -1,0 +1,37 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_TENANT_ID: ${VITE_TENANT_ID}
+        VITE_CLIENT_ID: ${VITE_CLIENT_ID}
+    ports:
+      - "443:443"
+    # Resource limits to improve vector database performance
+    mem_limit: 4g
+    memswap_limit: 16g
+    cpus: '4.0'
+    volumes:
+      # Mount SSL certificates for development
+      - ./ssl:/app/ssl
+      # Mount .env file if it exists
+      - ./.env:/app/.env:ro
+      # Mount Documents and vector_store for development
+      - ./Documents:/app/Documents:ro
+      - ./vector_store:/app/vector_store
+      # Mount database for persistence
+      - ./favorites.db:/app/favorites.db
+      # Mount JSON configuration files for persistence
+      - ./admins.json:/app/admins.json
+      - ./features.json:/app/features.json
+      - ./knowledge_fields.json:/app/knowledge_fields.json
+    environment:
+      - PYTHONPATH=/app
+      - FRONTEND_PATH=/app/frontend/dist
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

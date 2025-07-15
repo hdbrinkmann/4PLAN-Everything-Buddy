@@ -1,0 +1,8 @@
+{
+  "image_generation": true,
+  "image_upload": true,
+  "pdf_docx_upload": true,
+  "txt_sql_upload": true,
+  "xlsx_csv_analysis": true,
+  "web_search": true
+}

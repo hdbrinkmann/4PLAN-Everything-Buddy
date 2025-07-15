@@ -1,0 +1,43 @@
+# Exclude development files and directories
+node_modules
+frontend/node_modules
+.git
+.gitignore
+.DS_Store
+*.md
+.env.local
+.env.development
+
+# Exclude temporary and cache files
+temp_uploads/*
+generated_images/*
+*.log
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+
+# Exclude IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Exclude OS files
+Thumbs.db
+.DS_Store
+
+# Exclude development database files if any
+*.db-journal
+
+# Exclude any existing SSL files (we'll generate them in container)
+ssl/*
+*.pem
+*.key
+*.crt
+
+# Exclude backup files
+*.bak
+*.backup

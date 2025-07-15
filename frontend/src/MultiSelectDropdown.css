@@ -1,0 +1,102 @@
+/* MultiSelectDropdown.css */
+.multi-select-dropdown {
+    position: relative;
+    width: 100%;
+    color: #333;
+}
+
+.dropdown-header {
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.dropdown-header:hover {
+    background-color: #f9f9f9;
+}
+
+.dropdown-header.disabled {
+    background-color: #f2f2f2;
+    cursor: not-allowed;
+    color: #999;
+}
+
+.dropdown-header span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 10px;
+}
+
+.arrow {
+    border: solid #555;
+    border-width: 0 2px 2px 0;
+    display: inline-block;
+    padding: 3px;
+    transform: rotate(45deg);
+    -webkit-transform: rotate(45deg);
+    transition: transform 0.2s;
+}
+
+.arrow.up {
+    transform: rotate(-135deg);
+    -webkit-transform: rotate(-135deg);
+}
+
+.dropdown-list-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    background-color: #fff;
+    z-index: 1000;
+    max-height: 250px;
+    display: flex;
+    flex-direction: column;
+}
+
+.search-box {
+    width: calc(100% - 20px);
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin: 8px;
+    box-sizing: border-box;
+}
+
+.dropdown-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+}
+
+.dropdown-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.dropdown-item:hover {
+    background-color: #f0f0f0;
+}
+
+.dropdown-item input[type="checkbox"] {
+    margin-right: 10px;
+    pointer-events: none; /* The whole item is clickable */
+}
+
+.dropdown-item label {
+    flex-grow: 1;
+    cursor: pointer;
+}

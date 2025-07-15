@@ -1,0 +1,923 @@
+@import './CollapsibleSources.css';
+@import './CollapsibleTable.css';
+
+:root {
+  --primary-bg: #ffffff;
+  --secondary-bg: #f0f2f5;
+  --tertiary-bg: #ffffff; /* Making input and buttons white */
+  --text-primary: #050505;
+  --text-secondary: #65676b;
+  --accent-color: #8A1A11;
+  --user-message-bg: #8A1A11;
+  --assistant-message-bg: #e4e6eb;
+  --border-color: #ced0d4;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--primary-bg);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw; /* Fix for initial width calculation */
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background-color: var(--secondary-bg);
+  padding: 20px;
+  padding-bottom: 80px; /* Add space at the bottom for the absolute positioned logout button */
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  position: relative; /* Needed for absolute positioning of the logout button */
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.logo {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.sidebar-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.sidebar-actions button {
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.sidebar-action-icon {
+    width: 20px;
+    height: 20px;
+    filter: invert(1); /* Assuming icons are dark and need to be white */
+}
+
+.sidebar-actions button:hover {
+  background-color: #6b140e;
+}
+
+.sidebar-actions button:disabled {
+  background-color: #b0b0b0;
+  color: #6e6e6e;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sidebar-actions button:disabled:hover {
+  background-color: #b0b0b0;
+}
+
+.sidebar-actions button:disabled .sidebar-action-icon {
+  filter: none; /* Remove the invert filter for disabled state */
+  opacity: 0.6;
+}
+
+.sidebar-knowledge-fields-desktop {
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--primary-bg);
+}
+
+.sidebar-actions .sidebar-action-mobile-only {
+    display: none; /* Hidden by default */
+}
+
+.knowledge-fields-modal-content {
+    padding: 20px;
+    overflow: visible; /* Allow dropdown to overflow */
+}
+
+.sidebar-knowledge-fields-desktop h4 {
+    background-color: var(--accent-color);
+    color: white;
+    margin: 0;
+    padding: 12px;
+    font-size: 1rem;
+    text-align: center;
+    border-radius: 8px 8px 0 0;
+    font-weight: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.knowledge-fields-body {
+    padding: 15px;
+}
+
+.uploaded-file-name {
+    background-color: var(--primary-bg);
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.sidebar-status {
+  margin-top: auto;
+  padding: 10px 15px;
+  background-color: var(--primary-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-line {
+  flex-grow: 1;
+}
+
+.mode-icon-container {
+  flex-shrink: 0;
+  height: 28px; /* Fixed height for the container */
+  display: flex;
+  align-items: center;
+}
+
+.mode-icon-container img {
+  height: 100%; /* Make the image fill the container's height */
+  width: auto;
+}
+
+.sidebar-status strong {
+  color: var(--text-primary);
+}
+
+.sidebar-user {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+}
+
+.sidebar-user p {
+    margin: 0;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center content like other buttons */
+    gap: 10px;
+    background-color: var(--tertiary-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem; /* Match other buttons */
+    transition: background-color 0.2s;
+}
+
+.user-info:hover {
+    background-color: #e4e6eb;
+}
+
+.user-info .sidebar-action-icon {
+    filter: none; /* Logout icon should not be inverted */
+}
+
+.mobile-mode-icon {
+  display: none;
+}
+
+/* --- Chat Area --- */
+.chat-area {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0; /* Fix for initial width calculation */
+  position: relative; /* Needed for absolute positioning of the export button */
+}
+
+.chat-history {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-message {
+  display: flex;
+  /* max-width is now handled by more specific rules */
+}
+
+.chat-message.user,
+.chat-message.assistant:not(.chart-message) {
+  max-width: 75%;
+}
+
+.chat-message.user {
+  align-self: flex-end;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+}
+
+.chat-message.chart-message {
+  width: 75%;
+}
+
+.chat-message.chart-message .message-content {
+  width: 100%;
+}
+
+.message-content {
+  padding: 5px 15px;
+  border-radius: 18px;
+  line-height: 1.3;
+  min-width: 0; /* Prevents flex item from overflowing its container */
+  overflow-wrap: break-word;
+  max-width: 100%; /* Ensures content respects parent's max-width */
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+.chat-message.user .message-content {
+  background-color: var(--user-message-bg);
+  color: white;
+  border-top-right-radius: 4px;
+  position: relative;
+  padding-right: 35px; /* Make space for the button */
+}
+
+.chat-message.assistant .message-content {
+  background-color: var(--assistant-message-bg);
+  color: var(--text-primary);
+  border-top-left-radius: 4px;
+}
+
+
+.message-content a {
+    color: var(--accent-color);
+}
+
+.explanation-text {
+  font-style: italic;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* --- Markdown Specific Styles --- */
+.message-content p {
+  margin-top: 0;
+  margin-bottom: 0.5rem; /* Add some space between paragraphs */
+}
+
+.message-content p:last-child {
+  margin-bottom: 0;
+}
+
+.message-content ul,
+.message-content ol {
+  padding-left: 20px; /* Standard indentation for lists */
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.message-content li {
+  margin-bottom: 0.25rem; /* Space between list items */
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+/* --- Sources & Follow-ups --- */
+.follow-ups {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.follow-ups h4 {
+    margin: 0 0 10px 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.follow-up-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
+}
+
+.follow-up-buttons button {
+    background-color: var(--tertiary-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background-color 0.2s;
+    text-align: left;
+}
+
+.follow-up-buttons button:hover {
+    background-color: #dcdfe4;
+}
+
+/* --- Chat Action Buttons (Favorites, PDF Export) --- */
+.chat-action-buttons {
+  position: absolute;
+  /* bottom: 85px;  -- This is now handled by inline style */
+  right: 20px;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  z-index: 100;
+}
+
+.chat-action-buttons button {
+  background-color: var(--tertiary-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: background-color 0.2s, box-shadow 0.2s;
+  padding: 0;
+}
+
+.chat-action-buttons button:hover {
+  background-color: #e4e6eb;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.chat-action-buttons button img {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-action-buttons button:disabled {
+  background-color: #f0f2f5;
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.favorites-panel-btn,
+.history-panel-btn {
+  background: #2196F3;
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.favorites-panel-btn:hover,
+.history-panel-btn:hover {
+  background: #1976D2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.favorites-panel-btn img,
+.history-panel-btn img {
+  width: 24px;
+  height: 24px;
+}
+
+
+/* --- Chat Input Area --- */
+.chat-input-area {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--secondary-bg);
+}
+
+
+.chat-input-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start; /* Align items to the top */
+}
+
+.chat-input-form .upload-btn {
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.chat-input-form .upload-btn:hover {
+  background-color: #6b140e;
+}
+
+.chat-input-form .cancel-btn {
+  background-color: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  padding: 0;
+}
+
+.chat-input-form .cancel-btn:hover {
+  background-color: #6b140e;
+}
+
+.chat-input-form .cancel-btn img {
+  width: 24px;
+  height: 24px;
+  filter: invert(1);
+}
+
+.chat-input-form .record-btn {
+  background-color: var(--tertiary-bg);
+  border: 1px solid var(--border-color);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%; /* Make it round */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.chat-input-form .record-btn:hover {
+  background-color: #e4e6eb;
+}
+
+.chat-input-form .record-btn.recording {
+  background-color: #ffebeb;
+  border-color: var(--accent-color);
+  animation: pulse-animation 1.5s infinite;
+}
+
+.chat-input-form .record-btn img {
+  width: 24px;
+  height: 24px;
+}
+
+
+.chat-input-form textarea {
+  flex: 1;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+  background-color: var(--tertiary-bg);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-family: inherit; /* Ensure textarea uses the same font */
+  line-height: 1.4;
+  min-height: 48px; /* Minimum height matches the old input */
+  max-height: 200px; /* Maximum height before scrolling */
+  resize: none; /* Disable manual resizing by the user */
+  overflow-y: auto; /* Add scrollbar when content exceeds max-height */
+  box-sizing: border-box;
+}
+
+.chat-input-form textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.chat-input-form button[type="submit"] {
+  padding: 0 25px;
+  height: 48px;
+  border-radius: 18px;
+  border: none;
+  background-color: var(--accent-color);
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-input-form button[type="submit"]:hover {
+  background-color: #6b140e;
+}
+
+.chat-input-form button:disabled {
+  background-color: #b0b0b0;
+  cursor: not-allowed;
+}
+
+/* --- Thinking Indicator --- */
+.thinking-indicator p {
+  animation: blink-animation 1.5s infinite;
+}
+
+.working-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.working-gif {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  padding: 2px;
+  /* Match the assistant message background color */
+  background-color: var(--assistant-message-bg);
+  /* Add a subtle border to blend better */
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.working-indicator p {
+  margin: 0;
+  animation: blink-animation 1.5s infinite;
+}
+
+@keyframes blink-animation {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes pulse-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(138, 26, 17, 0.4);
+  }
+  70% {
+      box-shadow: 0 0 0 10px rgba(138, 26, 17, 0);
+  }
+  100% {
+      box-shadow: 0 0 0 0 rgba(138, 26, 17, 0);
+  }
+}
+
+/* --- Image Gallery for Python Charts --- */
+.image-gallery {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.image-gallery img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.plot-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.plotly-iframe {
+  width: 100%;
+  height: 500px; /* Adjust height as needed */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* --- Image Preview for Uploads --- */
+.image-preview-container {
+  padding-top: 10px;
+  padding-bottom: 5px;
+}
+
+.image-preview {
+  max-width: 100%;
+  max-height: 400px; /* Limit the maximum height */
+  height: auto; /* Maintain aspect ratio */
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+/* --- Favorites --- */
+.favorite-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0.6; /* Keep it slightly transparent */
+  transition: opacity 0.2s;
+}
+
+.favorite-btn:hover {
+  opacity: 1;
+}
+
+.favorite-btn img {
+  width: 18px;
+  height: 18px;
+}
+
+.favorites-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.favorites-panel {
+  background-color: var(--primary-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* Allow dropdown to overflow */
+}
+
+.favorites-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.favorites-panel-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.favorites-panel-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  line-height: 1;
+}
+
+.favorites-list {
+  overflow-y: auto;
+  padding: 10px 20px;
+  flex-grow: 1;
+}
+
+.favorite-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 5px;
+  border-bottom: 1px solid var(--secondary-bg);
+}
+
+.favorite-item:last-child {
+  border-bottom: none;
+}
+
+.favorite-text {
+  flex-grow: 1;
+  cursor: pointer;
+  padding-right: 15px;
+  color: var(--text-primary);
+  transition: color 0.2s;
+}
+
+.favorite-text:hover {
+  color: var(--accent-color);
+}
+
+.favorite-item .delete-btn {
+  background-color: #e4e6eb;
+  color: var(--text-primary);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.favorite-item .delete-btn:hover {
+  background-color: #dcdfe4;
+}
+
+/* --- Responsive Design --- */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 80px;
+    padding: 20px 10px;
+  }
+
+  .sidebar-header h2 {
+    display: none;
+  }
+
+  .sidebar-action-text {
+    display: none;
+  }
+
+  .sidebar-actions button {
+    padding: 12px;
+    justify-content: center;
+  }
+
+  .sidebar-knowledge-fields-desktop {
+    display: none; /* Hide the desktop version on mobile */
+  }
+
+  .sidebar-actions .sidebar-action-mobile-only {
+    display: flex; /* Show the mobile button */
+  }
+
+  .sidebar-action-mobile-only .sidebar-action-icon {
+    filter: brightness(0) invert(1); /* A more robust way to make the icon white */
+  }
+
+  .sidebar-status {
+    display: none; /* Hide status bar on mobile */
+  }
+
+  .mobile-mode-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+    height: 28px;
+  }
+
+  .mobile-mode-icon img {
+    height: 100%;
+    width: auto;
+  }
+
+  .sidebar-user span {
+    display: none;
+  }
+
+  .chat-action-buttons {
+    bottom: 75px;
+    right: 10px;
+    gap: 8px;
+  }
+
+  .chat-action-buttons button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .chat-action-buttons button img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .chat-input-area {
+    padding: 10px;
+  }
+
+  .chat-input-form {
+    gap: 8px;
+  }
+
+  .chat-input-form .upload-btn,
+  .chat-input-form .cancel-btn,
+  .chat-input-form .record-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+
+  .chat-input-form .cancel-btn img,
+  .chat-input-form .record-btn img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .chat-input-form textarea {
+    min-height: 40px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .chat-input-form button[type="submit"] {
+    height: 40px;
+    padding: 0 15px;
+    border-radius: 14px;
+  }
+}
+
+/* --- Generated Image Styles --- */
+.generated-image-container {
+  margin-top: 10px;
+  padding: 5px;
+  background-color: #e4e6eb; /* Match assistant message background */
+  border-radius: 12px;
+  display: inline-block; /* Fit content */
+}
+
+.generated-image {
+  display: block;
+  max-width: 75vw; /* Set a max-width relative to the viewport width */
+  max-height: 75vh; /* And a max-height */
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+}
+
+.chat-message.assistant .generated-image-container {
+  /* This class no longer needs a max-width, as it will shrink-to-fit the image */
+}
+
+/* Make the message bubble wrap the image tightly */
+.message-content.image-only-message {
+  display: inline-block;
+  padding: 5px;
+  background-color: transparent; /* The inner container has the color */
+}
