@@ -1,0 +1,29 @@
+services:
+  app:
+    image: ghcr.io/hdbrinkmann/4plan-everything-buddy:latest
+    ports:
+      - "443:443"
+    # Resource limits to improve vector database performance
+    mem_limit: 4g
+    memswap_limit: 16g
+    cpus: '4.0'
+    volumes:
+      # Mount SSL certificates
+      - ./ssl:/app/ssl
+      # Mount .env file if it exists
+      - ./.env:/app/.env:ro
+      # Mount database for persistence
+      - ./favorites.db:/app/favorites.db
+      # Mount JSON configuration files for persistence
+      - ./admins.json:/app/admins.json
+      - ./features.json:/app/features.json
+      - ./knowledge_fields.json:/app/knowledge_fields.json
+    environment:
+      - PYTHONPATH=/app
+      - FRONTEND_PATH=/app/frontend/dist
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
