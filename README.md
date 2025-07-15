@@ -1,20 +1,12 @@
 # 4PLAN Everything Buddy - Technical Specification
 
-## Table of Contents
-1. [System Overview](#system-overview)
-2. [Architecture](#architecture)
-3. [Core Components](#core-components)
-4. [AI Engine](#ai-engine)
-5. [Document Processing](#document-processing)
-6. [Security Framework](#security-framework)
-7. [Authentication & Authorization](#authentication--authorization)
-8. [Database Schema](#database-schema)
-9. [API Endpoints](#api-endpoints)
-10. [Frontend Components](#frontend-components)
-11. [Real-time Communication](#real-time-communication)
-12. [Deployment & Infrastructure](#deployment--infrastructure)
-13. [Configuration](#configuration)
-14. [Feature Management](#feature-management)
+## IMPORTANT NOTICE
+This app was written 100% AI based - no single line of code was written by me
+
+IDE was visual studio code and CLINE
+
+I used gemeni-2.5-pro and claude-4-sonnet to build it 
+
 
 ## System Overview
 
