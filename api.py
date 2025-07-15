@@ -1244,6 +1244,11 @@ async def stream_and_process_response(sid, generator, conversation_history, **kw
                     else:
                         print(f"Warning: chunk payload is not a string: {payload}")
                         
+                elif event_type == "clarification":
+                    payload = result.get("data", {})
+                    await sio.emit("clarification", {"data": payload}, to=sid)
+                    # Do not break, as the logic in get_answer already returns after yielding clarification
+                    
                 elif event_type == "end":
                     await sio.emit("answer_end", to=sid)
                     break
@@ -1315,6 +1320,15 @@ async def chat_message(sid, data):
         import traceback
         traceback.print_exc()
         await sio.emit("error", {"message": "An error occurred while processing your message."}, to=sid)
+
+@sio.event
+async def clarification(sid, data):
+    """
+    Handles the user's response to a clarification question.
+    This handler routes the request to the existing chat_message handler.
+    """
+    print("INFO: Received 'clarification' event, routing to 'chat_message' handler.")
+    await chat_message(sid, data)
 
 @sio.event
 async def document_question(sid, data):
@@ -1426,6 +1440,7 @@ async def update_knowledge_base(sid, data):
         # The logic's generator yields progress updates
         for message in logic.update_knowledge_base():
             await sio.emit("status", {"message": message}, to=sid)
+            await asyncio.sleep(0.05)  # Add a small delay to allow UI to update
         await sio.emit("status", {"message": "Knowledge base update complete."}, to=sid)
     except Exception as e:
         error_message = f"An error occurred during knowledge base update: {e}"

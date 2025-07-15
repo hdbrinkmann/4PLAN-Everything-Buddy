@@ -93,6 +93,7 @@ function MainContent() {
     const [previousFeatures, setPreviousFeatures] = useState({}); // State to track previous features for comparison
     const [lastImageB64, setLastImageB64] = useState(null); // State for the last generated image
     const [loadedHistoryId, setLoadedHistoryId] = useState(null); // Track loaded history entry to delete later
+    const [isAwaitingClarification, setIsAwaitingClarification] = useState(false);
     const isCancellingRef = useRef(isCancelling);
     const processingMessageIdRef = useRef(null); // Use a ref to avoid stale state in socket listener
     const messagesEndRef = useRef(null);
@@ -302,6 +303,20 @@ function MainContent() {
                         return newMessages;
                     });
                     setStatus(wasCancelled ? 'Generation cancelled.' : 'Ready');
+                });
+
+                newSocket.on('clarification', (data) => {
+                    setIsThinking(false);
+                    setIsGenerating(false);
+                    const clarificationMessage = {
+                        role: 'assistant',
+                        content: data.data.question,
+                        clarification_options: data.data.options,
+                        isComplete: true,
+                    };
+                    setMessages(prev => [...prev, clarificationMessage]);
+                    setStatus('Awaiting clarification...');
+                    setIsAwaitingClarification(true);
                 });
 
                 newSocket.on('error', (data) => {
@@ -572,6 +587,7 @@ function MainContent() {
         // We can reuse handleSendMessage now
         handleSendMessage(null, question, false); // Follow-ups are not from voice
         setStatus('Thinking...'); // handleSendMessage sets this, but let's be explicit
+        setIsAwaitingClarification(false);
     };
 
     const handleNewDialog = () => {
@@ -634,6 +650,7 @@ function MainContent() {
         if (fileInputRef.current) {
             fileInputRef.current.value = null;
         }
+        setIsAwaitingClarification(false);
         setStatus('Ready');
     };
 
@@ -1077,7 +1094,7 @@ function MainContent() {
         }
     };
 
-    const isChatDisabled = !socket || status.includes('Thinking') || status.includes('Updating') || status.includes('Uploading') || isRecording || isProcessingRag;
+    const isChatDisabled = !socket || status.includes('Thinking') || status.includes('Updating') || status.includes('Uploading') || isRecording || isProcessingRag || isAwaitingClarification;
 
     // Generate dynamic file accept string based on available features
     const getFileAcceptString = () => {
@@ -1305,6 +1322,15 @@ function MainContent() {
                                          <h4>You might also be interested in:</h4>
                                          <div className="follow-up-buttons">
                                              {msg.follow_ups.map((q, i) => (
+                                                 <button key={i} onClick={() => handleFollowUpClick(q)}>{q}</button>
+                                             ))}
+                                         </div>
+                                     </div>
+                                )}
+                                {msg.clarification_options && msg.clarification_options.length > 0 && (
+                                     <div className="follow-ups">
+                                         <div className="follow-up-buttons">
+                                             {msg.clarification_options.map((q, i) => (
                                                  <button key={i} onClick={() => handleFollowUpClick(q)}>{q}</button>
                                              ))}
                                          </div>

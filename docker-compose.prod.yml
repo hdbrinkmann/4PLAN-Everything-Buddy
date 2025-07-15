@@ -12,6 +12,9 @@ services:
       - ./ssl:/app/ssl
       # Mount .env file if it exists
       - ./.env:/app/.env:ro
+      # FIXED: Mount Documents and vector_store for production persistence
+      - ./Documents:/app/Documents:ro
+      - ./vector_store:/app/vector_store
       # Mount database for persistence
       - ./favorites.db:/app/favorites.db
       # Mount JSON configuration files for persistence

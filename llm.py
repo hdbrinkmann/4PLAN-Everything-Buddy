@@ -74,8 +74,17 @@ FAST_MODEL = "meta-llama/Llama-3.2-3B-Instruct-Turbo" # Fast model for analysis 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCUMENTS_PATH = os.path.join(SCRIPT_DIR, "Documents")
 VECTOR_STORE_PATH = os.path.join(SCRIPT_DIR, "vector_store")
-DEFAULT_CHUNK_SIZE = 1000  # Maximum safe chunk size for embedding model
-DEFAULT_OVERLAP = 300  # Increased overlap for better table continuity
+# Enhanced Chunking Strategy - Optimized for embedding model compatibility
+DEFAULT_CHUNK_SIZE = 2000  # Reduced for better embedding model compatibility
+DEFAULT_OVERLAP = 400  # Reduced overlap for better performance
+# Document-size-based chunking thresholds
+SMALL_DOC_THRESHOLD = 100000  # 100k chars - use full-text approach
+MEDIUM_DOC_THRESHOLD = 500000  # 500k chars - use large chunks
+LARGE_CHUNK_SIZE = 2500  # For large documents - reduced for compatibility
+MEDIUM_CHUNK_SIZE = 2000  # For medium documents - reduced for compatibility
+SMALL_CHUNK_SIZE = 1500  # For small documents - more conservative
+# Embedding model safety limits
+MAX_CHUNK_SIZE = 4000  # Absolute maximum chunk size for embedding model
 
 # --- Robust API Call Wrapper ---
 @retry(
@@ -356,18 +365,33 @@ def load_vector_store():
 def smart_chunk_document(file_path: str) -> list[Document]:
     """
     Creates intelligent chunks based on document structure with AI-enhanced context.
-    Each chunk gets enhanced context for better semantic understanding.
-    Fixed to handle API validation issues.
+    Uses adaptive chunking strategy based on document size and complexity.
+    Enhanced for better context preservation with larger chunks.
     """
     doc = docx.Document(file_path)
     docs = []
     current_headings = [""] * 6
     
-    # Extract knowledge field from the file path
+    # Extract knowledge field from the file path - Fixed to find the correct Documents folder
     path_parts = os.path.normpath(file_path).split(os.sep)
     try:
-        documents_index = path_parts.index('Documents')
-        knowledge_field = path_parts[documents_index + 1]
+        # Find the Documents folder that contains the script directory
+        script_dir_name = os.path.basename(SCRIPT_DIR)
+        script_index = path_parts.index(script_dir_name)
+        documents_index = script_index + 1  # Documents folder is right after script directory
+        
+        # Ensure we found the correct Documents folder
+        if documents_index < len(path_parts) and path_parts[documents_index] == 'Documents':
+            knowledge_field = path_parts[documents_index + 1]
+        else:
+            # Fallback: search for Documents folder from the right side
+            documents_indices = [i for i, part in enumerate(path_parts) if part == 'Documents']
+            if documents_indices:
+                # Take the last Documents folder found
+                documents_index = documents_indices[-1]
+                knowledge_field = path_parts[documents_index + 1]
+            else:
+                knowledge_field = "Unknown"
     except (ValueError, IndexError):
         knowledge_field = "Unknown"
 
@@ -408,11 +432,33 @@ def smart_chunk_document(file_path: str) -> list[Document]:
             "knowledge_field": knowledge_field
         })
 
-    # Create documents with enhanced context - using traditional chunking for API compatibility
+    # ENHANCED: Adaptive chunking based on document size and complexity
+    total_content_length = sum(len(block['content']) for block in content_blocks)
+    
+    # Determine optimal chunk size based on document characteristics
+    if total_content_length <= SMALL_DOC_THRESHOLD:
+        # Small documents: Use smaller chunks but still larger than original
+        chunk_size = SMALL_CHUNK_SIZE
+        overlap = 400
+        strategy_info = f"Small document ({total_content_length} chars) - Using {chunk_size} char chunks"
+    elif total_content_length <= MEDIUM_DOC_THRESHOLD:
+        # Medium documents: Use medium chunks  
+        chunk_size = MEDIUM_CHUNK_SIZE
+        overlap = DEFAULT_OVERLAP
+        strategy_info = f"Medium document ({total_content_length} chars) - Using {chunk_size} char chunks"
+    else:
+        # Large documents: Use large chunks for better context
+        chunk_size = LARGE_CHUNK_SIZE
+        overlap = 800  # More overlap for large chunks
+        strategy_info = f"Large document ({total_content_length} chars) - Using {chunk_size} char chunks"
+    
+    print(f"[ENHANCED CHUNKING] {strategy_info}")
+    
+    # Create documents with enhanced context using adaptive chunking
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=DEFAULT_CHUNK_SIZE,
-        chunk_overlap=DEFAULT_OVERLAP,
+        chunk_size=chunk_size,
+        chunk_overlap=overlap,
         separators=["\n\n", "\n", ". ", " ", ""]
     )
     
@@ -428,36 +474,42 @@ def smart_chunk_document(file_path: str) -> list[Document]:
         # Enhanced content with context - simplified format
         enhanced_content = f"Kontext: {heading_context}\n\n{content}"
         
-        # Split large blocks into smaller chunks for API compatibility
+        # Split large blocks into adaptive chunks
         chunks = text_splitter.split_text(enhanced_content)
         
         for j, chunk in enumerate(chunks):
             if chunk.strip():  # Only add non-empty chunks
+                # Validate chunk size for embedding model (max 8192 tokens ≈ 6000 chars)
+                chunk_content = chunk.strip()
+                if len(chunk_content) > 6000:
+                    print(f"[WARNING] Chunk too large ({len(chunk_content)} chars), truncating to 6000 chars")
+                    chunk_content = chunk_content[:6000]
+                
                 metadata = {
                     "source": file_path,
                     "heading": heading_context,
                     "knowledge_field": knowledge_field,
                     "block_id": f"{i}_{j}",
-                    "total_blocks": len(content_blocks)
+                    "total_blocks": len(content_blocks),
+                    "chunk_strategy": strategy_info,
+                    "chunk_size": chunk_size
                 }
                 
-                docs.append(Document(page_content=chunk.strip(), metadata=metadata))
+                docs.append(Document(page_content=chunk_content, metadata=metadata))
     
     return docs
 
 def _process_pdf_for_knowledge_base(file_path: str) -> list[Document]:
     """
-    Internal helper to process PDF files specifically for the main knowledge base.
-    This function is not intended for use by the user-facing upload feature.
+    Smarter PDF processing that extracts structure (headings) and adds it to chunks.
+    Mirrors the logic of smart_chunk_document for DOCX files to improve searchability.
     """
     docs = []
     try:
-        # Extract text using a reliable method. unstructured is a good choice here.
-        extracted_text = extract_text_with_unstructured(file_path, strategy="fast")
+        # Use unstructured to partition the PDF into structured elements.
+        # "hi_res" strategy is crucial for identifying elements like headers and titles.
+        elements = partition(filename=file_path, strategy="hi_res", languages=["deu", "eng"])
         
-        if not extracted_text.strip():
-            return []
-
         # Extract knowledge field from the file path
         path_parts = os.path.normpath(file_path).split(os.sep)
         try:
@@ -466,27 +518,60 @@ def _process_pdf_for_knowledge_base(file_path: str) -> list[Document]:
         except (ValueError, IndexError):
             knowledge_field = "Unknown"
 
-        # Chunk the extracted text
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=DEFAULT_CHUNK_SIZE,
             chunk_overlap=DEFAULT_OVERLAP,
             separators=["\n\n", "\n", ". ", " ", ""]
         )
-        chunks = text_splitter.split_text(extracted_text)
 
-        # Create Document objects for each chunk
-        for i, chunk in enumerate(chunks):
-            if chunk.strip():
-                metadata = {
-                    "source": file_path,
-                    "knowledge_field": knowledge_field,
-                    "chunk_id": i,
-                    "total_chunks": len(chunks)
-                }
-                docs.append(Document(page_content=chunk.strip(), metadata=metadata))
+        current_heading = ""
+        content_buffer = ""
+        
+        # Group text elements under the last seen heading
+        for element in elements:
+            # Heuristic to identify headings from element categories
+            is_heading = element.category in ("Title", "Header", "SubTitle")
+
+            if is_heading:
+                # When a new heading is found, process the content collected for the *previous* one.
+                if content_buffer.strip():
+                    # Add context to the content before chunking
+                    page_content = f"[Kontext: {current_heading}] {content_buffer.strip()}" if current_heading else content_buffer.strip()
+                    chunks = text_splitter.split_text(page_content)
+                    for i, chunk_text in enumerate(chunks):
+                        if chunk_text.strip():
+                            metadata = {
+                                "source": file_path,
+                                "heading": current_heading,
+                                "knowledge_field": knowledge_field,
+                                "chunk_id": f"{element.id}_{i}"
+                            }
+                            docs.append(Document(page_content=chunk_text.strip(), metadata=metadata))
+                    content_buffer = ""  # Reset buffer after processing
+
+                # Update the current heading with the new one found
+                current_heading = element.text.strip()
+            else:
+                # If it's not a heading, add its text to the buffer for the current section
+                content_buffer += element.text + "\n"
+
+        # After the loop, process any remaining content in the buffer
+        if content_buffer.strip():
+            page_content = f"[Kontext: {current_heading}] {content_buffer.strip()}" if current_heading else content_buffer.strip()
+            chunks = text_splitter.split_text(page_content)
+            for i, chunk_text in enumerate(chunks):
+                if chunk_text.strip():
+                    metadata = {
+                        "source": file_path,
+                        "heading": current_heading,
+                        "knowledge_field": knowledge_field,
+                        "chunk_id": f"final_chunk_{i}"
+                    }
+                    docs.append(Document(page_content=chunk_text.strip(), metadata=metadata))
+
     except Exception as e:
-        print(f"Error processing PDF {file_path} for knowledge base: {e}")
-        # Return empty list on failure to avoid adding bad data
+        print(f"Error processing PDF {file_path} with smart chunking: {e}")
+        # On failure, return an empty list to avoid adding bad data to the vector store
         return []
         
     return docs
@@ -551,18 +636,22 @@ def force_create_vector_store():
             try:
                 chunks = []
                 if doc_path.lower().endswith('.docx'):
-                    # Process DOCX files using the existing smart chunking
+                    yield f"    - Using DOCX processor..."
                     chunks = smart_chunk_document(doc_path)
-                    yield f"    - Created {len(chunks)} intelligent chunks from DOCX"
+                    yield f"    - Created {len(chunks)} intelligent chunks from DOCX."
                 elif doc_path.lower().endswith('.pdf'):
-                    # Process PDF files using the new dedicated helper
+                    yield f"    - Using PDF processor..."
                     chunks = _process_pdf_for_knowledge_base(doc_path)
-                    yield f"    - Created {len(chunks)} chunks from PDF"
+                    yield f"    - Created {len(chunks)} intelligent chunks from PDF."
                 
-                all_docs.extend(chunks)
-                
+                if chunks:
+                    all_docs.extend(chunks)
+                    yield f"    - Successfully added {len(chunks)} chunks to the knowledge base."
+                else:
+                    yield f"    - WARNING: No chunks were created for this document. It might be empty or unreadable."
+
             except Exception as e:
-                yield f"  - Error processing {filename}: {e}"
+                yield f"  - CRITICAL ERROR processing {filename}: {e}"
                 continue
 
         if not all_docs:
@@ -1474,9 +1563,10 @@ def extract_context_keywords(client, conversation_history: list) -> list[str]:
         print(f"Error during context keyword extraction: {e}")
         return []
 
-def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int = 3, min_avg_score: float = 0.3) -> dict:
+def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int = 3, min_avg_score: float = 0.3, high_quality_threshold: float = 0.7) -> dict:
     """
     Evaluates the quality of vector store results to determine if fallback is needed.
+    Now prioritizes quality over quantity - allows fewer documents if they are highly relevant.
     Returns a dict with 'quality_sufficient', 'reason', and 'stats'.
     """
     if not docs:
@@ -1484,14 +1574,6 @@ def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int 
             "quality_sufficient": False, 
             "reason": "Keine Dokumente gefunden",
             "stats": {"doc_count": 0, "avg_score": 0.0}
-        }
-    
-    # Check if we have enough documents
-    if len(docs) < min_docs:
-        return {
-            "quality_sufficient": False,
-            "reason": f"Zu wenige relevante Dokumente gefunden ({len(docs)} von mindestens {min_docs})",
-            "stats": {"doc_count": len(docs), "avg_score": 0.0}
         }
     
     # Simple content relevance check - look for key terms from question in documents
@@ -1517,19 +1599,55 @@ def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int 
         relevance_scores.append(score)
     
     avg_score = sum(relevance_scores) / len(relevance_scores)
+    max_score = max(relevance_scores) if relevance_scores else 0
     
-    # Check if average relevance is sufficient
-    if avg_score < min_avg_score:
+    # NEW LOGIC: Prioritize quality over quantity
+    
+    # Case 1: High quality documents (even if few)
+    if avg_score >= high_quality_threshold or max_score >= high_quality_threshold:
         return {
-            "quality_sufficient": False,
-            "reason": f"Geringe Relevanz der gefundenen Dokumente (Score: {avg_score:.2f})",
-            "stats": {"doc_count": len(docs), "avg_score": avg_score}
+            "quality_sufficient": True,
+            "reason": f"Hochrelevante Dokumente gefunden (Avg: {avg_score:.2f}, Max: {max_score:.2f}) - Qualität über Quantität",
+            "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
         }
     
+    # Case 2: Sufficient documents with acceptable quality
+    if len(docs) >= min_docs and avg_score >= min_avg_score:
+        return {
+            "quality_sufficient": True,
+            "reason": f"Ausreichende Dokumentenqualität und -anzahl gefunden (Score: {avg_score:.2f})",
+            "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
+        }
+    
+    # Case 3: Few documents with mediocre quality
+    if len(docs) < min_docs and avg_score < min_avg_score:
+        return {
+            "quality_sufficient": False,
+            "reason": f"Zu wenige Dokumente ({len(docs)}) und geringe Relevanz (Score: {avg_score:.2f})",
+            "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
+        }
+    
+    # Case 4: Few documents but decent quality
+    if len(docs) < min_docs and avg_score >= min_avg_score:
+        return {
+            "quality_sufficient": False,
+            "reason": f"Zu wenige relevante Dokumente gefunden ({len(docs)} von mindestens {min_docs}), aber akzeptable Qualität",
+            "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
+        }
+    
+    # Case 5: Sufficient documents but low quality
+    if len(docs) >= min_docs and avg_score < min_avg_score:
+        return {
+            "quality_sufficient": False,
+            "reason": f"Genügend Dokumente ({len(docs)}) aber geringe Relevanz (Score: {avg_score:.2f})",
+            "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
+        }
+    
+    # Fallback
     return {
         "quality_sufficient": True,
-        "reason": f"Ausreichende Dokumentenqualität gefunden (Score: {avg_score:.2f})",
-        "stats": {"doc_count": len(docs), "avg_score": avg_score}
+        "reason": f"Dokumentenqualität akzeptabel (Score: {avg_score:.2f})",
+        "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
     }
 
 def route_query(client, conversation_history: list, cancellation_check=lambda: False) -> str:
@@ -1539,17 +1657,35 @@ def route_query(client, conversation_history: list, cancellation_check=lambda: F
     """
     system_prompt = """You are a highly efficient and accurate query router. Your task is to classify the user's LATEST question into one of four categories.
 
+**CRITICAL: MOST IMPORTANT RULE FOR IMAGE GENERATION:**
+- **NEVER use 'image_generation' for questions that start with "Wie", "How", "What", "Was", "Can", "Kannst"**
+- **ONLY use 'image_generation' for IMPERATIVE COMMANDS (no question words)**
+- **Questions about image creation are ALWAYS 'direct_answer'**
+
+**SPECIFIC EXAMPLES:**
+- "Wie erzeuge ich ein Bild?" → direct_answer (THIS IS A QUESTION)
+- "How do I create an image?" → direct_answer (THIS IS A QUESTION)
+- "What is image generation?" → direct_answer (THIS IS A QUESTION)
+- "Can you generate images?" → direct_answer (THIS IS A QUESTION)
+- "Kannst du Bilder erstellen?" → direct_answer (THIS IS A QUESTION)
+- "Erzeuge ein Bild von einem Hund" → image_generation (THIS IS A COMMAND)
+- "Draw a cat" → image_generation (THIS IS A COMMAND)
+- "Mach ein Bild" → image_generation (THIS IS A COMMAND)
+
 1.  **vector_store**: Use this for questions about specific, internal, or proprietary topics. This is the correct choice for any question containing technical terms, jargon, or names (like "4PLAN", "Ermittlungstyp", "S4U", "HRCC") that are clearly not general public knowledge, even if the question seems simple.
     - Example: "What is our car policy?", "Tell me about the 4PLAN Dashboard Designer.", "Was ist ein Ermittlungstyp in 4PLAN?"
 
 2.  **web_search**: Use this for questions that require up-to-date, public information. This includes current events, news, public figures, product reviews, or general knowledge that changes over time.
     - Example: "What is the latest news on AI?", "Who won the election?", "What are the reviews for the new iPhone?"
 
-3.  **image_generation**: Use this for explicit requests to generate, create, draw, or make an image, picture, or graphic.
-    - Example: "erzeuge ein bild mit Donald trump im Clownskostüm", "draw a picture of a cat eating popcorn", "mach mal ein Bild von einem Auto"
+3.  **image_generation**: Use this ONLY for imperative commands without question words.
+    - **COMMANDS (YES)**: "erzeuge ein bild", "draw a picture", "mach mal ein Bild", "create an image of a sunset"
+    - **QUESTIONS (NO)**: "Wie erzeuge ich ein Bild?", "How do I create an image?", "What is image generation?"
 
-4.  **direct_answer**: Use this for general knowledge questions that are static and don't require a search, or for simple conversational phrases. This is the fallback if no other category fits.
-    - Example: "What is a large language model?", "Thank you", "What is the capital of Germany?", "was ist ein bild von einem hund?"
+4.  **direct_answer**: Use this for general knowledge questions, instructions, tutorials, or conversational phrases. This includes ALL questions that start with question words.
+    - Example: "What is a large language model?", "Thank you", "Wie erzeuge ich ein Bild?", "How do I create an image?", "What is image generation?"
+
+**FINAL CHECK: If the user's message contains "Wie", "How", "What", "Was", "Can", "Kannst" → ALWAYS use 'direct_answer'**
 
 Respond with ONLY one of the following keywords: `vector_store`, `web_search`, `image_generation`, or `direct_answer`.
 """
@@ -1782,54 +1918,15 @@ def get_cache_statistics():
         "valid_files": valid_files
     }
 
-def duckduckgo_instant_answer(query: str) -> dict:
+def check_for_ambiguity(client, conversation_history: list, cancellation_check=lambda: False) -> dict:
     """
-    Try to get instant answers from DuckDuckGo API.
-    Returns dict with 'answer' and 'source' or None if no instant answer.
+    Checks if the user's query is ambiguous, specifically for image generation only.
+    Returns a dictionary indicating if clarification is needed.
+    DISABLED: This function now always returns False to prevent unnecessary clarifications.
     """
-    try:
-        # DuckDuckGo Instant Answer API
-        url = "https://api.duckduckgo.com/"
-        params = {
-            'q': query,
-            'format': 'json',
-            'no_html': '1',
-            'skip_disambig': '1'
-        }
-        
-        response = requests.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        
-        # Check for instant answer
-        if data.get('Abstract') and data.get('AbstractText'):
-            return {
-                'answer': data['AbstractText'],
-                'source': data.get('AbstractURL', 'DuckDuckGo'),
-                'type': 'abstract'
-            }
-        
-        # Check for definition
-        if data.get('Definition') and data.get('DefinitionText'):
-            return {
-                'answer': data['DefinitionText'],
-                'source': data.get('DefinitionURL', 'DuckDuckGo'),
-                'type': 'definition'
-            }
-        
-        # Check for answer box
-        if data.get('Answer') and data.get('AnswerType'):
-            return {
-                'answer': data['Answer'],
-                'source': 'DuckDuckGo',
-                'type': 'answer'
-            }
-        
-        return None
-        
-    except Exception as e:
-        print(f"DuckDuckGo API error: {e}")
-        return None
+    # Completely disable ambiguity checking as it was causing too many false positives
+    # Even clear questions like "Wie erzeuge ich ein Bild?" were triggering clarifications
+    return {"clarification_needed": False}
 
 async def get_answer(conversation_history: list, source_mode: str = None, selected_fields: list = None, image_b64: str = None, cancellation_check=lambda: False):
     """
@@ -1840,11 +1937,53 @@ async def get_answer(conversation_history: list, source_mode: str = None, select
     try:
         client = Together(api_key=os.getenv("TOGETHER_API_KEY"))
         last_question = conversation_history[-1]["content"]
+
+        # --- QUALITY FALLBACK CLARIFICATION HANDLING ---
+        # Check if the user is responding to a quality fallback clarification
+        user_choice = last_question.strip()
+        
+        if user_choice in ["Perform web search", "Use Knowledge Base anyway", "Do not answer now, I will reformulate my question"]:
+            # User is responding to quality fallback clarification
+            if user_choice == "Perform web search":
+                # User chose web search - execute web search fallback
+                yield {"type": "status", "data": "User chose web search - executing fallback search..."}
+                # Force web search mode for this response
+                determined_source_mode = "web_search"
+            elif user_choice == "Use Knowledge Base anyway":
+                # User chose to use KB anyway - proceed with vector store
+                yield {"type": "status", "data": "User chose to use Knowledge Base anyway - proceeding with available results..."}
+                determined_source_mode = "vector_store_forced"  # Special mode to skip quality evaluation
+            elif user_choice == "Do not answer now, I will reformulate my question":
+                # User chose to reformulate - end processing
+                yield {"type": "meta", "data": {"sources": "User will reformulate question", "keywords": "N/A", "follow_ups": [], "source_mode": None}}
+                yield {"type": "chunk", "data": "I understand. Please feel free to reformulate your question, and I'll do my best to help you."}
+                yield {"type": "end"}
+                return
+
+        # --- AMBIGUITY CHECK ---
+        # First, check if the user's query is ambiguous and needs clarification.
+        # This is only necessary if no file has been uploaded (image_b64 is None).
+        # Skip this check if we're handling a quality fallback response
+        if (not image_b64 and 
+            'determined_source_mode' not in locals()):
+            yield {"type": "status", "data": "Checking for ambiguity..."}
+            ambiguity_result = await asyncio.to_thread(check_for_ambiguity, client, conversation_history, cancellation_check)
+            if ambiguity_result.get("clarification_needed"):
+                yield {
+                    "type": "clarification",
+                    "data": {
+                        "question": ambiguity_result.get("question"),
+                        "options": ambiguity_result.get("options")
+                    }
+                }
+                return # Stop processing, wait for user's clarifying response
+
         # --- Mode Decision Logic with Context-Awareness ---
         # If the session is already in image_generation mode, keep it there.
         if source_mode == "image_generation":
             determined_source_mode = "image_generation"
-        else:
+        elif 'determined_source_mode' not in locals():
+            # Only do routing if we haven't already determined the source mode from quality fallback
             # STEP 1: Check if we can answer from conversation context (Hybrid Approach)
             yield {"type": "status", "data": "Analyzing conversation context..."}
             if cancellation_check(): return
@@ -1869,10 +2008,12 @@ async def get_answer(conversation_history: list, source_mode: str = None, select
                     determined_source_mode = 'image_generation'
                 # 2. Check for web search
                 elif routed_mode == 'web_search':
-                    if 'Web' in selected_fields:
+                    # Check if web search is enabled by the user
+                    features = load_features()
+                    if features.get("web_search", True) and 'Web' in selected_fields:
                         determined_source_mode = 'web_search'
                     else:
-                        # Web search is disabled by user, so fall back to direct answer
+                        # Web search is disabled, so fall back to direct answer
                         determined_source_mode = 'direct_answer'
                 # 3. Check for vector store
                 elif routed_mode == 'vector_store':
@@ -2050,207 +2191,42 @@ Be specific and reference the previous information directly."""
                 top_docs = []
             
             # NEW: Evaluate quality of vector store results and implement fallback
-            yield {"type": "status", "data": "Evaluating search result quality..."}
-            quality_eval = evaluate_vector_store_quality(top_docs, last_question)
+            # BUT ONLY if the user hasn't already decided to use Knowledge Base anyway
+            if 'skip_quality_evaluation' in locals() and skip_quality_evaluation:
+                # User explicitly chose to use Knowledge Base anyway - skip quality evaluation
+                yield {"type": "status", "data": "Using Knowledge Base as requested by user..."}
+                quality_eval = {"quality_sufficient": True, "reason": "User chose to use Knowledge Base anyway"}
+            else:
+                yield {"type": "status", "data": "Evaluating search result quality..."}
+                quality_eval = evaluate_vector_store_quality(top_docs, last_question)
+                
+                # Check if we should fallback to web search
+                if not quality_eval["quality_sufficient"]:
+                    yield {"type": "status", "data": f"Vector Store Qualität unzureichend: {quality_eval['reason']}"}
+                    
+                    # Check if web search is available as fallback
+                    features = load_features()
+                    web_search_available = features.get("web_search", True) and 'Web' in selected_fields
+                    
+                    if web_search_available:
+                        # Ask user for confirmation before fallback
+                        yield {
+                            "type": "clarification",
+                            "data": {
+                                "question": "I don't find high quality data in the knowledge base to answer the question. What do you want me to do?",
+                                "options": [
+                                    "Perform web search",
+                                    "Use Knowledge Base anyway", 
+                                    "Do not answer now, I will reformulate my question"
+                                ],
+                                "clarification_type": "quality_fallback"
+                            }
+                        }
+                        return  # Stop processing, wait for user's clarifying response
+                    else:
+                        # No web search available, proceed with what we have but inform user
+                        yield {"type": "status", "data": "Web-Suche nicht verfügbar - verwende verfügbare Knowledge Base Ergebnisse..."}
             
-            # Check if we should fallback to web search
-            if not quality_eval["quality_sufficient"]:
-                yield {"type": "status", "data": f"Vector Store Qualität unzureichend: {quality_eval['reason']}"}
-                
-                # Check if web search is available as fallback
-                features = load_features()
-                web_search_available = features.get("web_search", True) and 'Web' in selected_fields
-                
-                if web_search_available:
-                    yield {"type": "status", "data": "Automatischer Fallback zur Web-Suche wird durchgeführt..."}
-                    
-                    # Execute web search fallback (reuse existing web search logic)
-                    # Extract context keywords from conversation for better search
-                    yield {"type": "status", "data": "Extracting context keywords from conversation..."}
-                    context_keywords = await asyncio.to_thread(extract_context_keywords, client, conversation_history)
-                    
-                    # Get German queries
-                    german_queries = await asyncio.to_thread(expand_query_with_llm, client, conversation_history)
-                    
-                    # Enhance queries with context keywords (with validation)
-                    if context_keywords:
-                        yield {"type": "status", "data": f"Enhancing search with context: {', '.join(context_keywords[:3])}..."}
-                        enhanced_german_queries = []
-                        for query in german_queries:
-                            # Clean and validate context keywords
-                            clean_keywords = []
-                            for keyword in context_keywords[:3]:
-                                # Remove non-alphanumeric characters except spaces and common punctuation
-                                clean_keyword = re.sub(r'[^\w\s\-\.\,]', '', keyword.strip())
-                                if clean_keyword and len(clean_keyword) > 2:
-                                    clean_keywords.append(clean_keyword)
-                            
-                            # Add context keywords only if they don't make the query too long
-                            if clean_keywords:
-                                enhanced_query = f"{query} {' '.join(clean_keywords)}"
-                                # Limit query length to prevent Google search errors
-                                if len(enhanced_query) <= 200:
-                                    enhanced_german_queries.append(enhanced_query)
-                                else:
-                                    enhanced_german_queries.append(query)  # Use original if too long
-                            else:
-                                enhanced_german_queries.append(query)
-                        german_queries = enhanced_german_queries
-                    
-                    yield {"type": "status", "data": "Translating search queries to English..."}
-                    
-                    # Translate queries to English
-                    if cancellation_check(): return
-                    english_queries = await asyncio.to_thread(translate_queries_to_english, client, german_queries, cancellation_check)
-
-                    # Perform searches in parallel for better performance (reduced to 3 results per language)
-                    yield {"type": "status", "data": "Performing fallback web search..."}
-                    if cancellation_check(): return
-                    
-                    german_search_query = ", ".join(german_queries)
-                    english_search_query = ", ".join(english_queries) if english_queries else ""
-                    
-                    # Run searches in parallel with error handling
-                    tasks = []
-                    
-                    # Validate and clean search queries before execution
-                    def clean_search_query(query):
-                        # Remove special characters that might cause issues
-                        cleaned = re.sub(r'[^\w\s\-\.\,\?\!]', '', query.strip())
-                        # Limit length to prevent errors
-                        return cleaned[:200] if len(cleaned) > 200 else cleaned
-                    
-                    clean_german_query = clean_search_query(german_search_query)
-                    clean_english_query = clean_search_query(english_search_query) if english_search_query else ""
-                    
-                    # Execute searches with error handling (reduced to 3 results per language)
-                    try:
-                        if clean_german_query:
-                            tasks.append(asyncio.create_task(asyncio.to_thread(list, search(clean_german_query, num_results=3, lang="de"))))
-                        if clean_english_query:
-                            tasks.append(asyncio.create_task(asyncio.to_thread(list, search(clean_english_query, num_results=3, lang="en"))))
-                        
-                        if not tasks:
-                            yield {"type": "meta", "data": {"sources": f"Fallback failed: Invalid search query", "keywords": "Invalid search query", "follow_ups": []}}
-                            yield {"type": "chunk", "data": "Sowohl die Knowledge Base als auch die Web-Suche konnten keine ausreichenden Ergebnisse liefern. Bitte versuchen Sie, Ihre Frage anders zu formulieren."}
-                            yield {"type": "end"}
-                            return
-                        
-                        search_results = await asyncio.gather(*tasks)
-                        
-                        # Process search results (same logic as web search)
-                        raw_german_results = search_results[0]
-                        german_urls = [url for url in raw_german_results if (url.startswith('http://') or url.startswith('https://')) and 'google.com/search' not in url][:3]
-                        
-                        # Process English results (reduced to 3)
-                        english_urls = []
-                        if len(search_results) > 1:
-                            raw_english_results = search_results[1]
-                            english_urls = [url for url in raw_english_results if (url.startswith('http://') or url.startswith('https://')) and 'google.com/search' not in url][:3]
-
-                        # Combine and deduplicate results (now max 6 instead of 8)
-                        all_urls = german_urls + english_urls
-                        fallback_search_results = sorted(list(set(all_urls)))
-                        
-                        web_search_query = f"FALLBACK - DE: {german_search_query} | EN: {', '.join(english_queries) if english_queries else ''}"
-
-                        if not fallback_search_results:
-                            yield {"type": "meta", "data": {"sources": f"Fallback: No web sources found", "keywords": web_search_query, "follow_ups": []}}
-                            yield {"type": "chunk", "data": "Sowohl die Knowledge Base als auch die Web-Suche konnten keine relevanten Ergebnisse liefern. Bitte versuchen Sie, Ihre Frage anders zu formulieren."}
-                            yield {"type": "end"}
-                            return
-
-                        # Take only the top 4 sources for faster processing
-                        priority_sources = fallback_search_results[:4]
-                        
-                        yield {"type": "status", "data": f"Scraping {len(priority_sources)} fallback sources..."}
-                        
-                        # Enhanced parallel scraping with better error handling
-                        async def scrape_with_error_handling(url):
-                            try:
-                                content = await asyncio.to_thread(scrape_website_content, url)
-                                return {"url": url, "content": truncate_text(content, 12000), "success": True}
-                            except Exception as e:
-                                print(f"Error scraping {url}: {e}")
-                                return {"url": url, "content": f"Error accessing content: {e}", "success": False}
-                        
-                        # Create scraping tasks for priority sources only
-                        scrape_tasks = [scrape_with_error_handling(url) for url in priority_sources]
-                        scraped_results = await asyncio.gather(*scrape_tasks)
-                        
-                        # Filter successful results and log failures
-                        successful_results = [result for result in scraped_results if result["success"]]
-                        
-                        if not successful_results:
-                            yield {"type": "meta", "data": {"sources": f"Fallback failed: Could not access web content", "keywords": web_search_query, "follow_ups": []}}
-                            yield {"type": "chunk", "data": "Die Knowledge Base lieferte unzureichende Ergebnisse und die Fallback Web-Suche konnte nicht auf die Inhalte zugreifen. Bitte versuchen Sie, Ihre Frage anders zu formulieren."}
-                            yield {"type": "end"}
-                            return
-
-                        # Create the consolidated context for the LLM, embedding the URL directly with the source number.
-                        consolidated_content = "\n\n---\n\n".join(
-                            [f"Source [{i+1}]({res['url']}):\n{res['content']}" for i, res in enumerate(successful_results)]
-                        )
-
-                        system_prompt = f"""You are a web analysis expert. Your task is to answer the user's question based *only* on the provided 'Web Search Context'.
-
-**IMPORTANT CONTEXT:** This is a fallback search because the internal knowledge base did not provide sufficient relevant information.
-
-**Instructions:**
-1.  Read the user's question: '{last_question}'.
-2.  Analyze the 'Web Search Context'. Each source is now formatted as `Source [number](URL): content`.
-3.  Formulate a comprehensive answer in the same language as the user's question.
-4.  **Cite sources by using the exact markdown hyperlink provided in the context.** For example, when you use information from `Source [1](https://example.com/source1)`, you must cite it as `[1](https://example.com/source1)`.
-5.  **Placement Rule:** Place citation links within the descriptive text (e.g., at the end of a sentence).
-6.  Structure your answer using markdown, including bullet points for clarity.
-7.  If the provided context is insufficient, state that you could not find the information.
-8.  **Crucial Rule: DO NOT** add a separate list of sources (e.g., "Quellen:", "Sources:") at the end of your answer. All source citations **MUST** be the inline markdown hyperlinks from the context.
-
-**Correct Citation Example:**
-"This is a descriptive sentence that uses information from a source [1](https://example.com/source1)."
-"""
-                        # Truncate context to fit within model limits
-                        messages_for_size_check = create_contextual_messages(conversation_history, system_prompt)
-                        conversation_chars = sum(len(m['content']) for m in messages_for_size_check)
-                        # Adjusted remaining_chars to account for the larger prompt
-                        remaining_chars = 512000 - conversation_chars
-                        final_context = truncate_text(consolidated_content, remaining_chars)
-
-                        messages = create_contextual_messages(conversation_history, system_prompt)
-                        messages.append({"role": "system", "content": f"Web Search Context:\n\n{final_context}"})
-
-                        # Generate follow-ups first
-                        temp_response = await asyncio.to_thread(robust_api_call, client, LLM_MODEL, messages, 0.0, stream=False)
-                        temp_answer = ""
-                        if temp_response.choices and temp_response.choices[0].message.content:
-                            temp_answer = temp_response.choices[0].message.content.strip()
-                        follow_ups = await asyncio.to_thread(generate_follow_up_questions, client, conversation_history, temp_answer, consolidated_content)
-
-                        # Yield metadata with fallback indication
-                        yield {"type": "meta", "data": {"sources": f"**Fallback Web Sources:**\n" + "\n".join([f"- {url}" for url in fallback_search_results]), "keywords": f"FALLBACK: {web_search_query}", "follow_ups": follow_ups, "source_mode": "web_search"}}
-
-                        # Stream the answer
-                        yield {"type": "status", "data": "Generating answer from fallback web search..."}
-                        if cancellation_check(): return
-                        stream = robust_api_call(client, LLM_MODEL, messages, 0.0, stream=True)
-                        for chunk in stream:
-                            if cancellation_check(): return
-                            if chunk.choices and chunk.choices[0].delta.content:
-                                yield {"type": "chunk", "data": chunk.choices[0].delta.content}
-                        yield {"type": "end"}
-                        return
-                        
-                    except Exception as search_error:
-                        yield {"type": "status", "data": f"Fallback search error: {str(search_error)[:100]}..."}
-                        yield {"type": "meta", "data": {"sources": f"Fallback failed: Search API error", "keywords": "Search API error", "follow_ups": []}}
-                        yield {"type": "chunk", "data": "Die Knowledge Base lieferte unzureichende Ergebnisse und die Fallback Web-Suche schlug aufgrund technischer Probleme fehl. Bitte versuchen Sie, Ihre Frage anders zu formulieren."}
-                        yield {"type": "end"}
-                        return
-                        
-                else:
-                    # No web search available, proceed with what we have but inform user
-                    yield {"type": "status", "data": "Web-Suche nicht verfügbar - verwende verfügbare Knowledge Base Ergebnisse..."}
-                    
             yield {"type": "status", "data": "Processing semantic search results..."}
 
             context = ""
@@ -2536,6 +2512,12 @@ You **MUST** respond with a single, valid JSON object. This JSON object must hav
 1.  `"python_code"`: A string containing the complete, raw Python script.
 2.  `"explanation"`: A string containing a user-friendly explanation in German.
 
+**Sonderfall: Nicht umsetzbare Fragen:**
+- Wenn die Frage des Benutzers zu allgemein ist oder keine spezifische Datenauswertung erfordert (z.B. "Was ist das für eine Datei?", "Erzähl mir was über die Daten"), dann darfst du **KEINEN** Python-Code erzeugen.
+- In diesem Fall muss dein JSON so aussehen:
+  `"python_code": ""` (ein leerer String)
+  `"explanation": "Ihre Frage kann nicht in eine konkrete Datenauswertung umgewandelt werden. Bitte beachten Sie, dass bei Tabellen-Dateien nur spezifische Auswertungen per Python-Skript möglich sind."`
+
 **Rules for `"python_code"`:**
 - The script's output must be either a JSON table (`your_dataframe.to_json(orient='split', index=False)`) or an HTML file for charts.
 - **All charts MUST be generated using the `plotly` library** (e.g., `import plotly.express as px` or `import plotly.graph_objects as go`). The output MUST be saved as an HTML file (e.g., `fig.write_html('temp_images/plot.html')`). Do NOT use any other plotting library.
@@ -2677,16 +2659,14 @@ async def get_answer_from_document(conversation_history: list, document_content:
                 return
 
         # --- Text/Table Document Branch (existing logic) ---
-        elif file_type in ['text', 'sql', 'table']:
-             # If the file is a .txt or .sql file, always answer with AI, never use Python
-            if file_type in ['text', 'sql']:
+        elif file_type in ['text', 'sql', 'table', 'table_data']:
+            # For table files, always require a Python script for data privacy
+            if file_type in ['table', 'table_data']:
+                yield {"type": "python_required"}
+                return
+            # For .txt or .sql files, always answer with AI, never use Python
+            elif file_type in ['text', 'sql']:
                 pass # Skip the python check and proceed to the AI answer
-            # For other file types (like tables), check if a script is needed
-            else:
-                is_python_needed = await asyncio.to_thread(needs_python_script, client, conversation_history)
-                if is_python_needed:
-                    yield {"type": "python_required"}
-                    return
 
         yield {"type": "status", "data": "TEMPORARY TEST: Using full document content without chunking..."}
 

@@ -2,6 +2,7 @@ import uvicorn
 from api import app
 import os
 import shutil
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,6 +37,10 @@ def setup_ssl_certificates():
     return cert_file, key_file
 
 if __name__ == "__main__":
+    # Configure logging to reduce httpx verbosity
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     clear_temp_uploads()
     """
     This is the main entry point for the backend server.
