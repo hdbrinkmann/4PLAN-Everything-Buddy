@@ -106,7 +106,9 @@ def truncate_text(text: str, max_chars: int) -> str:
 import glob
 
 def get_document_list(path: str) -> list:
-    all_files = glob.glob(os.path.join(path, "**/*.docx"), recursive=True)
+    docx_files = glob.glob(os.path.join(path, "**/*.docx"), recursive=True)
+    pdf_files = glob.glob(os.path.join(path, "**/*.pdf"), recursive=True)
+    all_files = docx_files + pdf_files
     return [f for f in all_files if not os.path.basename(f).startswith('~$')]
 
 async def extract_document_structure_with_llm(file_path: str) -> dict:
@@ -443,6 +445,52 @@ def smart_chunk_document(file_path: str) -> list[Document]:
     
     return docs
 
+def _process_pdf_for_knowledge_base(file_path: str) -> list[Document]:
+    """
+    Internal helper to process PDF files specifically for the main knowledge base.
+    This function is not intended for use by the user-facing upload feature.
+    """
+    docs = []
+    try:
+        # Extract text using a reliable method. unstructured is a good choice here.
+        extracted_text = extract_text_with_unstructured(file_path, strategy="fast")
+        
+        if not extracted_text.strip():
+            return []
+
+        # Extract knowledge field from the file path
+        path_parts = os.path.normpath(file_path).split(os.sep)
+        try:
+            documents_index = path_parts.index('Documents')
+            knowledge_field = path_parts[documents_index + 1]
+        except (ValueError, IndexError):
+            knowledge_field = "Unknown"
+
+        # Chunk the extracted text
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=DEFAULT_CHUNK_SIZE,
+            chunk_overlap=DEFAULT_OVERLAP,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        chunks = text_splitter.split_text(extracted_text)
+
+        # Create Document objects for each chunk
+        for i, chunk in enumerate(chunks):
+            if chunk.strip():
+                metadata = {
+                    "source": file_path,
+                    "knowledge_field": knowledge_field,
+                    "chunk_id": i,
+                    "total_chunks": len(chunks)
+                }
+                docs.append(Document(page_content=chunk.strip(), metadata=metadata))
+    except Exception as e:
+        print(f"Error processing PDF {file_path} for knowledge base: {e}")
+        # Return empty list on failure to avoid adding bad data
+        return []
+        
+    return docs
+
 def force_create_vector_store():
     """
     Clean and simple knowledge base creation using smart chunking and pure semantic search.
@@ -501,10 +549,17 @@ def force_create_vector_store():
             filename = os.path.basename(doc_path)
             yield f"  - Processing document {i+1}/{len(doc_files)}: {filename}"
             try:
-                # Use smart chunking based on document structure
-                smart_chunks = smart_chunk_document(doc_path)
-                all_docs.extend(smart_chunks)
-                yield f"    - Created {len(smart_chunks)} intelligent chunks with context"
+                chunks = []
+                if doc_path.lower().endswith('.docx'):
+                    # Process DOCX files using the existing smart chunking
+                    chunks = smart_chunk_document(doc_path)
+                    yield f"    - Created {len(chunks)} intelligent chunks from DOCX"
+                elif doc_path.lower().endswith('.pdf'):
+                    # Process PDF files using the new dedicated helper
+                    chunks = _process_pdf_for_knowledge_base(doc_path)
+                    yield f"    - Created {len(chunks)} chunks from PDF"
+                
+                all_docs.extend(chunks)
                 
             except Exception as e:
                 yield f"  - Error processing {filename}: {e}"
