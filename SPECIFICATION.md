@@ -179,8 +179,8 @@ POST /export/pdf            # Generate PDF reports
 - **Main LLM**: `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`
 - **Image Analysis**: `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`
 - **Image Generation**: `black-forest-labs/FLUX.1-kontext-max`
-- **Embeddings**: `BAAI/bge-base-en-v1.5`
-- **Translation**: `meta-llama/Llama-3.2-3B-Instruct-Turbo`
+- **Embeddings**: `intfloat/multilingual-e5-large-instruct` (Enhanced multilingual model)
+- **Fast Model**: `meta-llama/Llama-3.2-3B-Instruct-Turbo` (For analysis and translation)
 
 ### Query Routing Intelligence
 
@@ -207,9 +207,21 @@ def route_query(client, conversation_history: list) -> str:
 
 **Architecture**:
 - **Multi-Domain Storage**: Separate vector stores per knowledge field
-- **Optimized Chunking**: 1000-character chunks with 300-character overlap
+- **Enhanced Chunking Strategy**: Adaptive chunking based on document size and complexity
 - **Batch Processing**: 64-document batches for embedding efficiency
 - **Dynamic Re-ranking**: Cross-encoder models for relevance optimization
+- **Multilingual Embeddings**: `intfloat/multilingual-e5-large-instruct` for German/English support
+
+**Enhanced Chunking Parameters**:
+```python
+# Adaptive chunking based on document characteristics
+SMALL_DOC_THRESHOLD = 100000   # 100k chars - use 1500 char chunks
+MEDIUM_DOC_THRESHOLD = 500000  # 500k chars - use 2000 char chunks  
+LARGE_CHUNK_SIZE = 2500        # For large documents
+MEDIUM_CHUNK_SIZE = 2000       # For medium documents
+SMALL_CHUNK_SIZE = 1500        # For small documents
+MAX_CHUNK_SIZE = 4000          # Absolute maximum for embedding model
+```
 
 **Knowledge Fields**:
 ```python
@@ -217,24 +229,40 @@ def route_query(client, conversation_history: list) -> str:
 vector_stores = {
     "4PLAN Deutsch": FAISS_Store,
     "S4U intern": FAISS_Store,
+    "S4U & 4PLAN": FAISS_Store,
     "Web": Web_Search_Handler
 }
 ```
 
 ### Document Intelligence
 
-**RAG Pipeline**:
-1. **Document Analysis**: Complexity assessment for processing strategy
-2. **Intelligent Chunking**: Adaptive chunking based on document structure
+**Enhanced RAG Pipeline**:
+1. **Document Analysis**: Complexity assessment and structure extraction with LLM
+2. **Intelligent Chunking**: Adaptive chunking preserving document structure
 3. **Full-text vs. Chunked**: Automatic decision based on document size (200K threshold)
 4. **Multi-stage Retrieval**: Initial search + re-ranking for optimal results
+5. **Quality Evaluation**: Result quality assessment with web search fallback
 
-**PDF Processing Strategy**:
+**Smart PDF Processing Strategy**:
 ```python
-# Smart extraction hierarchy
-1. PyMuPDF (fast) → Simple documents
-2. pdfplumber (tables) → Table-heavy documents  
-3. unstructured (comprehensive) → Complex layouts
+# Intelligent extraction hierarchy with complexity analysis
+1. Complexity Analysis → Determine optimal strategy
+2. PyMuPDF (fast) → Simple documents, good extraction
+3. pdfplumber (tables) → Table-heavy documents, preserves structure
+4. unstructured (comprehensive) → Complex layouts, hi-res processing
+```
+
+**Full-text vs RAG Decision**:
+```python
+# Intelligent processing decision for uploaded documents
+FULLTEXT_THRESHOLD = 200000  # 200k characters
+
+if len(document_text) < FULLTEXT_THRESHOLD:
+    # Full-text analysis - optimal for tables and structured data
+    save_fulltext_marker(document_text)
+else:
+    # RAG processing - chunked approach for large documents
+    create_vector_embeddings(adaptive_chunks)
 ```
 
 ## Document Processing
