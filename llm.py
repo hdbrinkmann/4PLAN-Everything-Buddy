@@ -63,6 +63,65 @@ def load_features():
     except Exception:
         return default_features
 
+def extract_domain_from_email(email: str) -> str:
+    """Extract the domain from an email address."""
+    if not email or "@" not in email:
+        return ""
+    return email.split("@")[1].lower()
+
+def check_knowledge_field_permission(user_email: str, field_name: str) -> bool:
+    """Check if a user has permission to access a specific knowledge field."""
+    if not user_email or not field_name:
+        return False
+    
+    # Skip permission check for "Web" field
+    if field_name == "Web":
+        return True
+    
+    user_domain = extract_domain_from_email(user_email)
+    if not user_domain:
+        return False
+    
+    # Load knowledge fields configuration
+    fields_file = "knowledge_fields.json"
+    try:
+        if os.path.exists(fields_file):
+            with open(fields_file, 'r') as f:
+                knowledge_fields_data = json.load(f)
+            
+            if field_name in knowledge_fields_data:
+                field_config = knowledge_fields_data[field_name]
+                if isinstance(field_config, dict):
+                    allowed_domains = field_config.get("domains", [])
+                    return user_domain in allowed_domains
+                else:
+                    # Old format compatibility - check if user is admin
+                    admins_file = "admins.json"
+                    try:
+                        if os.path.exists(admins_file):
+                            with open(admins_file, 'r') as f:
+                                admins_data = json.load(f)
+                                admin_list = admins_data.get("admins", [])
+                            return user_email in admin_list
+                    except:
+                        pass
+        return False
+    except Exception as e:
+        print(f"Error checking knowledge field permission: {e}")
+        return False
+
+def filter_accessible_fields(user_email: str, selected_fields: list) -> list:
+    """Filter selected fields to only include those the user has permission to access."""
+    if not user_email or not selected_fields:
+        return []
+    
+    accessible_fields = []
+    for field in selected_fields:
+        if check_knowledge_field_permission(user_email, field):
+            accessible_fields.append(field)
+    
+    return accessible_fields
+
 # --- Global Variables ---
 LLM_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 #LLM_MODEL = "deepseek-ai/DeepSeek-V3" # Alternative model for general use
@@ -1950,11 +2009,12 @@ def check_for_ambiguity(client, conversation_history: list, cancellation_check=l
     # Even clear questions like "Wie erzeuge ich ein Bild?" were triggering clarifications
     return {"clarification_needed": False}
 
-async def get_answer(conversation_history: list, source_mode: str = None, selected_fields: list = None, image_b64: str = None, cancellation_check=lambda: False):
+async def get_answer(conversation_history: list, source_mode: str = None, selected_fields: list = None, image_b64: str = None, user_email: str = None, cancellation_check=lambda: False):
     """
     Orchestrator for retrieving answers.
     This function is an async generator that yields status updates, metadata, and streamed answer chunks.
     It uses a persistent source_mode ('vector_store' or 'web_search') for the entire session.
+    Now includes domain-based access control for knowledge fields.
     """
     try:
         client = Together(api_key=os.getenv("TOGETHER_API_KEY"))
@@ -2149,6 +2209,15 @@ Be specific and reference the previous information directly."""
             
             # Clean approach: Pure semantic search with excellent multilingual embeddings
             expanded_queries = await asyncio.to_thread(expand_query_with_llm, client, conversation_history)
+            
+            # Apply domain-based access control
+            if user_email:
+                # Filter selected fields based on user's domain permissions
+                accessible_fields = filter_accessible_fields(user_email, selected_fields)
+                if len(accessible_fields) < len(selected_fields):
+                    excluded_fields = set(selected_fields) - set(accessible_fields)
+                    yield {"type": "status", "data": f"Access restricted: Knowledge fields {excluded_fields} not accessible from your domain"}
+                selected_fields = accessible_fields
             
             target_stores = {}
             if selected_fields:

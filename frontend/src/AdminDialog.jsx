@@ -27,6 +27,11 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
     const [loadingData, setLoadingData] = useState(false);
     const [exportingData, setExportingData] = useState(false);
     
+    // Knowledge field domain management states
+    const [knowledgeFields, setKnowledgeFields] = useState([]);
+    const [loadingKnowledgeFields, setLoadingKnowledgeFields] = useState(false);
+    const [savingKnowledgeFields, setSavingKnowledgeFields] = useState(false);
+    
     // These states are no longer needed since CollapsibleTable handles filtering internally
 
     useEffect(() => {
@@ -107,6 +112,80 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         window.dispatchEvent(new CustomEvent('updateKnowledgeBase'));
         setUpdatingKB(false);
         onClose();
+    };
+
+    // Load knowledge field domains for admin management
+    const loadKnowledgeFieldDomains = async () => {
+        if (!accessToken) return;
+        setLoadingKnowledgeFields(true);
+        try {
+            const response = await fetch(getApiUrl('knowledge_field_domains'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setKnowledgeFields(data.knowledge_fields);
+            } else {
+                console.error('Failed to load knowledge field domains:', response.status);
+            }
+        } catch (error) {
+            console.error('Error loading knowledge field domains:', error);
+        } finally {
+            setLoadingKnowledgeFields(false);
+        }
+    };
+
+    // Save knowledge field domains
+    const saveKnowledgeFieldDomains = async () => {
+        if (!accessToken) return;
+        setSavingKnowledgeFields(true);
+        try {
+            const response = await fetch(getApiUrl('knowledge_field_domains'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(knowledgeFields),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                alert(`Knowledge field domains updated successfully: ${data.message}`);
+                // Trigger a refresh of knowledge fields in the main app
+                window.dispatchEvent(new CustomEvent('knowledgeFieldsUpdated'));
+            } else {
+                const errorData = await response.json();
+                alert('Failed to save knowledge field domains: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error saving knowledge field domains:', error);
+            alert('Error saving knowledge field domains: ' + error.message);
+        } finally {
+            setSavingKnowledgeFields(false);
+        }
+    };
+
+    // Handle domain changes for a specific knowledge field
+    const handleDomainChange = (fieldIndex, domainIndex, newDomain) => {
+        const updatedFields = [...knowledgeFields];
+        updatedFields[fieldIndex].domains[domainIndex] = newDomain;
+        setKnowledgeFields(updatedFields);
+    };
+
+    // Add a new domain to a knowledge field
+    const addDomainToField = (fieldIndex) => {
+        const updatedFields = [...knowledgeFields];
+        updatedFields[fieldIndex].domains.push('');
+        setKnowledgeFields(updatedFields);
+    };
+
+    // Remove a domain from a knowledge field
+    const removeDomainFromField = (fieldIndex, domainIndex) => {
+        const updatedFields = [...knowledgeFields];
+        updatedFields[fieldIndex].domains.splice(domainIndex, 1);
+        setKnowledgeFields(updatedFields);
     };
 
     const handleFeatureChange = (featureName, value) => {
@@ -295,7 +374,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
 
     // Format date for display with explicit UTC to German timezone conversion
     const formatDate = (dateString) => {
-        if (!dateString) return 'Noch aktiv';
+        if (!dateString) return 'Still active';
         
         // Parse the date as UTC (backend sends ISO strings in UTC)
         const utcDate = new Date(dateString + (dateString.includes('Z') ? '' : 'Z'));
@@ -317,7 +396,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
     // Helper functions to convert data for CollapsibleTable
     const convertUserSummaryToTableFormat = (data) => {
         return {
-            columns: ['Benutzer', 'Anmeldungen', 'Chat-Fragen', 'Letzte Anmeldung'],
+            columns: ['User', 'Logins', 'Questions', 'Last Login'],
             data: data.map(user => [
                 user.username,
                 user.login_count.toString(),
@@ -329,23 +408,24 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
 
     const convertLoginSessionsToTableFormat = (data) => {
         return {
-            columns: ['Benutzer', 'Anmeldung', 'Abmeldung', 'Dauer'],
+            columns: ['User', 'Login', 'Logout', 'Duration'],
             data: data.map(session => [
                 session.username,
                 formatDate(session.login_time),
                 formatDate(session.logout_time),
-                session.duration || 'Noch aktiv'
+                session.duration || 'Still active'
             ])
         };
     };
 
     const convertChatQuestionsToTableFormat = (data) => {
         return {
-            columns: ['Benutzer', 'Zeitpunkt', 'Frage'],
+            columns: ['User', 'Time', 'Question', 'Rating'],
             data: data.map(question => [
                 question.username,
                 formatDate(question.timestamp),
-                question.question_text
+                question.question_text,
+                question.rating === 'good' ? 'good' : question.rating === 'poor' ? 'poor' : 'n/a'
             ])
         };
     };
@@ -379,7 +459,10 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                     </button>
                     <button 
                         className={`tab-btn ${activeTab === 'knowledge' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('knowledge')}
+                        onClick={() => {
+                            setActiveTab('knowledge');
+                            loadKnowledgeFieldDomains();
+                        }}
                     >
                         Knowledge Base
                     </button>
@@ -390,7 +473,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             loadUserSummary();
                         }}
                     >
-                        Benutzer-Übersicht
+                        Users
                     </button>
                     <button 
                         className={`tab-btn ${activeTab === 'login_sessions' ? 'active' : ''}`}
@@ -399,7 +482,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             loadLoginSessions();
                         }}
                     >
-                        Anmeldungen
+                        Logins
                     </button>
                     <button 
                         className={`tab-btn ${activeTab === 'chat_questions' ? 'active' : ''}`}
@@ -408,7 +491,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             loadChatQuestions();
                         }}
                     >
-                        Chat-Fragen
+                        Questions
                     </button>
                 </div>
 
@@ -516,18 +599,76 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                         <div className="knowledge-tab">
                             <h4>Knowledge Base Management</h4>
                             <p className="tab-description">
-                                Update the internal knowledge base from document folders. This process can take a very long time.
+                                Manage knowledge fields and their domain access permissions. Then update the internal knowledge base from document folders.
                             </p>
                             
-                            <div className="knowledge-actions">
-                                <button 
-                                    className="update-kb-btn"
-                                    onClick={updateKnowledgeBase}
-                                    disabled={updatingKB}
-                                >
-                                    {updatingKB ? 'Starting Update...' : 'Update Knowledge Base'}
-                                </button>
+                            <div className="knowledge-domain-management">
+                                <h5>Domain Access Management</h5>
+                                <p className="domain-description">
+                                    Control which email domains can access each knowledge field. Users can only access knowledge fields from their email domain.
+                                </p>
+                                
+                                {loadingKnowledgeFields ? (
+                                    <div className="loading">Loading knowledge fields...</div>
+                                ) : (
+                                    <div className="knowledge-fields-list">
+                                        {knowledgeFields.map((field, fieldIndex) => (
+                                            <div key={fieldIndex} className="knowledge-field-item">
+                                                <div className="field-header">
+                                                    <h6>{field.field_name}</h6>
+                                                </div>
+                                                <div className="field-domains">
+                                                    <label>Allowed Domains:</label>
+                                                    {field.domains.map((domain, domainIndex) => (
+                                                        <div key={domainIndex} className="domain-input-group">
+                                                            <input
+                                                                type="text"
+                                                                value={domain}
+                                                                onChange={(e) => handleDomainChange(fieldIndex, domainIndex, e.target.value)}
+                                                                placeholder="example.com"
+                                                                className="domain-input"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeDomainFromField(fieldIndex, domainIndex)}
+                                                                className="remove-domain-btn"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => addDomainToField(fieldIndex)}
+                                                        className="add-domain-btn"
+                                                    >
+                                                        + Add Domain
+                                                    </button>
+                                                    {field.domains.length === 0 && (
+                                                        <p className="no-domains-warning">
+                                                            No domains configured - only admins can access this field
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {knowledgeFields.length === 0 && (
+                                            <p className="no-fields-message">No knowledge fields found. Update the knowledge base first.</p>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                <div className="domain-actions">
+                                    <button
+                                        onClick={saveKnowledgeFieldDomains}
+                                        disabled={savingKnowledgeFields || loadingKnowledgeFields}
+                                        className="save-domains-btn"
+                                    >
+                                        {savingKnowledgeFields ? 'Saving...' : 'Save Domain Settings'}
+                                    </button>
+                                </div>
                             </div>
+                            
                         </div>
                     )}
 
@@ -590,9 +731,18 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                         </>
                     )}
                     {activeTab === 'knowledge' && (
-                        <button className="cancel-btn" onClick={onClose}>
-                            Close
-                        </button>
+                        <>
+                            <button 
+                                className="update-kb-btn" 
+                                onClick={updateKnowledgeBase}
+                                disabled={updatingKB}
+                            >
+                                {updatingKB ? 'Starting Update...' : 'Update Knowledge Base'}
+                            </button>
+                            <button className="cancel-btn" onClick={onClose}>
+                                Close
+                            </button>
+                        </>
                     )}
                     {(activeTab === 'user_summary' || activeTab === 'login_sessions' || activeTab === 'chat_questions') && (
                         <>

@@ -206,7 +206,7 @@ class AppLogic:
         if sid in self.cancellation_flags:
             del self.cancellation_flags[sid]
 
-    async def process_new_question(self, sid: str, conversation_history: list, source_mode: str = None, selected_fields: list = None, image_b64: str = None):
+    async def process_new_question(self, sid: str, conversation_history: list, source_mode: str = None, selected_fields: list = None, image_b64: str = None, user: User = None):
         """
         Processes a new question based on the provided conversation history.
         This is an async generator that yields status updates and the final answer.
@@ -218,11 +218,15 @@ class AppLogic:
             if last_question.upper() == "WIPE":
                 image_b64 = None # Ensure no image is passed for refinement
 
+            # Extract user email for domain-based access control
+            user_email = user.username if user else None
+
             async for result in get_answer(
                 conversation_history,
                 source_mode,
                 selected_fields=selected_fields,
                 image_b64=image_b64,
+                user_email=user_email,
                 cancellation_check=lambda: self._get_cancellation_flag(sid)
             ):
                 yield result
@@ -234,17 +238,37 @@ class AppLogic:
         Triggers the knowledge base update process.
         This is a generator that yields progress updates.
         """
-        # --- Derive and store knowledge fields ---
+        # --- Derive and store knowledge fields with domain permissions ---
         yield "Processing document structure..."
         documents_path = "Documents"
         fields_file = "knowledge_fields.json"
         try:
             if os.path.isdir(documents_path):
-                fields = [d for d in os.listdir(documents_path) if os.path.isdir(os.path.join(documents_path, d))]
-                fields = [f for f in fields if not f.startswith('.')]
+                # Load existing knowledge fields configuration
+                existing_fields_data = {}
+                if os.path.exists(fields_file):
+                    with open(fields_file, 'r') as f:
+                        existing_fields_data = json.load(f)
+
+                # Get current directories from Documents folder
+                current_fields = [d for d in os.listdir(documents_path) if os.path.isdir(os.path.join(documents_path, d))]
+                current_fields = [f for f in current_fields if not f.startswith('.')]
+
+                # Update the fields data
+                updated_fields_data = {}
+                for field in current_fields:
+                    if field in existing_fields_data:
+                        # Preserve existing domain permissions
+                        updated_fields_data[field] = existing_fields_data[field]
+                    else:
+                        # New field - initialize with empty domains (admin only access)
+                        updated_fields_data[field] = {"domains": []}
+
+                # Save the updated configuration
                 with open(fields_file, 'w') as f:
-                    json.dump(fields, f)
-                yield f"Found {len(fields)} knowledge fields."
+                    json.dump(updated_fields_data, f, indent=2)
+                
+                yield f"Found {len(current_fields)} knowledge fields. Preserved existing domain permissions."
             else:
                 yield "Documents directory not found. Skipping field update."
         except Exception as e:

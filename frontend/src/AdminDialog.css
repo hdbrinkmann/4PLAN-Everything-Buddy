@@ -409,3 +409,157 @@
         margin-left: 22px;
     }
 }
+
+/* Knowledge field domain management styles */
+.knowledge-domain-management {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.knowledge-domain-management h5 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.domain-description {
+    margin: 0 0 20px 0;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.knowledge-fields-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.knowledge-field-item {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 16px;
+    background-color: white;
+}
+
+.field-header h6 {
+    margin: 0 0 12px 0;
+    color: #333;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.field-domains label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+    font-size: 14px;
+}
+
+.domain-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.domain-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.domain-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.remove-domain-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.remove-domain-btn:hover {
+    background: #c82333;
+}
+
+.add-domain-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    margin-top: 8px;
+}
+
+.add-domain-btn:hover {
+    background: #218838;
+}
+
+.no-domains-warning {
+    margin: 8px 0 0 0;
+    color: #856404;
+    font-size: 13px;
+    font-style: italic;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+
+.no-fields-message {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+.domain-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.save-domains-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.save-domains-btn:hover:not(:disabled) {
+    background: #0056b3;
+}
+
+.save-domains-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}

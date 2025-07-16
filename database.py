@@ -76,6 +76,7 @@ class ChatQuestionLog(Base):
     question_text = Column(Text)
     timestamp = Column(DateTime, default=datetime.utcnow)
     session_id = Column(String, nullable=True)  # Socket.IO session ID
+    rating = Column(String, nullable=True)  # 'good', 'poor', or null
     
     user = relationship("User", back_populates="chat_questions")
 

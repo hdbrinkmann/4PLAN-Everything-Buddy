@@ -138,6 +138,14 @@ class FeatureConfig(BaseModel):
     xlsx_csv_analysis: bool
     web_search: bool
 
+class KnowledgeFieldDomain(BaseModel):
+    field_name: str
+    domains: List[str]
+
+class QuestionRating(BaseModel):
+    question_id: int
+    rating: str  # 'good' or 'poor'
+
 @fastapi_app.get("/favorites/")
 async def get_favorites(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return logic.get_favorites(db, user)
@@ -171,7 +179,8 @@ async def update_group_order(update: GroupOrderUpdate, db: Session = Depends(get
     return logic.update_group_order(db, user, update.ordered_ids)
 
 @fastapi_app.get("/knowledge_fields")
-async def get_knowledge_fields():
+async def get_knowledge_fields(user: User = Depends(get_current_user)):
+    """Get knowledge fields accessible to the current user based on domain permissions."""
     fields_file = "knowledge_fields.json"
     features_file = "features.json"
     
@@ -185,26 +194,29 @@ async def get_knowledge_fields():
                 features.update(json.load(f))
         
         # Load knowledge fields
-        document_fields = []
+        document_fields_data = {}
         if os.path.exists(fields_file):
             with open(fields_file, 'r') as f:
-                document_fields = json.load(f)
+                document_fields_data = json.load(f)
         else:
             # If the file doesn't exist, maybe the update was never run.
             # Fallback to the old behavior to not break the app.
             documents_path = "Documents"
             if os.path.isdir(documents_path):
-                document_fields = [d for d in os.listdir(documents_path) if os.path.isdir(os.path.join(documents_path, d))]
-                document_fields = [f for f in document_fields if not f.startswith('.')]
+                # Create old format for backward compatibility
+                document_fields_data = {}
+                for d in os.listdir(documents_path):
+                    if os.path.isdir(os.path.join(documents_path, d)) and not d.startswith('.'):
+                        document_fields_data[d] = {"domains": []}  # Empty domains = admin only
         
-        # Build final fields list based on features
-        final_fields = document_fields.copy()
+        # Filter fields based on user's domain permissions
+        accessible_fields = get_user_accessible_fields(user, document_fields_data)
         
         # Add "Web" only if web_search feature is enabled
         if features.get("web_search", True):
-            final_fields.append("Web")
+            accessible_fields.append("Web")
         
-        return {"fields": final_fields}
+        return {"fields": accessible_fields}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -301,6 +313,75 @@ async def update_features(features: FeatureConfig, user: User = Depends(get_curr
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating features: {str(e)}")
 
+# --- Knowledge Field Domain Management Endpoints ---
+@fastapi_app.get("/admin/knowledge_field_domains")
+async def get_knowledge_field_domains(user: User = Depends(get_current_user)):
+    """Gets all knowledge fields and their domain permissions (admin only)."""
+    check_admin_access(user)
+    
+    fields_file = "knowledge_fields.json"
+    try:
+        knowledge_fields_data = {}
+        if os.path.exists(fields_file):
+            with open(fields_file, 'r') as f:
+                knowledge_fields_data = json.load(f)
+        else:
+            # If the file doesn't exist, scan Documents folder for existing fields
+            documents_path = "Documents"
+            if os.path.isdir(documents_path):
+                for d in os.listdir(documents_path):
+                    if os.path.isdir(os.path.join(documents_path, d)) and not d.startswith('.'):
+                        knowledge_fields_data[d] = {"domains": []}
+        
+        # Convert to list format expected by frontend
+        result = []
+        for field_name, config in knowledge_fields_data.items():
+            if isinstance(config, dict):
+                domains = config.get("domains", [])
+            else:
+                domains = []  # Old format compatibility
+            result.append({
+                "field_name": field_name,
+                "domains": domains
+            })
+        
+        return {"knowledge_fields": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading knowledge field domains: {str(e)}")
+
+@fastapi_app.post("/admin/knowledge_field_domains")
+async def update_knowledge_field_domains(domains_data: List[KnowledgeFieldDomain], user: User = Depends(get_current_user)):
+    """Updates knowledge field domain permissions (admin only)."""
+    check_admin_access(user)
+    
+    fields_file = "knowledge_fields.json"
+    try:
+        # Load existing data
+        existing_data = {}
+        if os.path.exists(fields_file):
+            with open(fields_file, 'r') as f:
+                existing_data = json.load(f)
+        
+        # Update with new domain data
+        updated_data = {}
+        for domain_config in domains_data:
+            field_name = domain_config.field_name
+            domains = domain_config.domains
+            
+            # Only keep fields that actually exist in the Documents folder
+            documents_path = "Documents"
+            field_path = os.path.join(documents_path, field_name)
+            if os.path.exists(field_path) and os.path.isdir(field_path):
+                updated_data[field_name] = {"domains": domains}
+        
+        # Save updated data
+        with open(fields_file, 'w') as f:
+            json.dump(updated_data, f, indent=2)
+        
+        return {"status": "success", "message": f"Updated {len(updated_data)} knowledge fields"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating knowledge field domains: {str(e)}")
+
 # --- Helper function for admin check ---
 def check_admin_access(user: User):
     """Check if the current user has admin access."""
@@ -319,6 +400,46 @@ def check_admin_access(user: User):
         raise
     except Exception as e:
         raise HTTPException(status_code=403, detail="Admin access required")
+
+def extract_domain_from_email(email: str) -> str:
+    """Extract the domain from an email address."""
+    if not email or "@" not in email:
+        return ""
+    return email.split("@")[1].lower()
+
+def get_user_accessible_fields(user: User, knowledge_fields_data: dict) -> list:
+    """Filter knowledge fields based on user's domain permissions."""
+    if not hasattr(user, 'username') or not user.username:
+        return []
+    
+    user_domain = extract_domain_from_email(user.username)
+    if not user_domain:
+        return []
+    
+    accessible_fields = []
+    
+    for field_name, field_config in knowledge_fields_data.items():
+        # Handle both old format (list) and new format (dict with domains)
+        if isinstance(field_config, dict):
+            allowed_domains = field_config.get("domains", [])
+            if user_domain in allowed_domains:
+                accessible_fields.append(field_name)
+        else:
+            # Old format compatibility - if it's just a string, allow access for admins only
+            # Check if user is admin
+            admins_file = "admins.json"
+            try:
+                if os.path.exists(admins_file):
+                    with open(admins_file, 'r') as f:
+                        admins_data = json.load(f)
+                        admin_list = admins_data.get("admins", [])
+                    
+                    if user.username in admin_list:
+                        accessible_fields.append(field_name)
+            except:
+                pass  # If admin check fails, don't grant access
+    
+    return accessible_fields
 
 # --- User Logging Endpoints ---
 @fastapi_app.get("/admin/login_sessions")
@@ -371,7 +492,8 @@ async def get_chat_questions(db: Session = Depends(get_db), user: User = Depends
                 "username": question.user.username,
                 "question_text": question.question_text,
                 "timestamp": question.timestamp.isoformat(),
-                "session_id": question.session_id
+                "session_id": question.session_id,
+                "rating": question.rating if question.rating else "n/a"
             })
         
         return {"chat_questions": result}
@@ -588,6 +710,28 @@ async def get_chat_history_detail(chat_id: int, db: Session = Depends(get_db), u
 async def delete_chat_history(chat_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Deletes a chat history."""
     return logic.delete_chat_history(db, user, chat_id)
+
+@fastapi_app.post("/chat_questions/rate")
+async def rate_question(rating: QuestionRating, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Rate a chat question as good or poor."""
+    try:
+        # Find the question and verify it belongs to the user
+        question = db.query(ChatQuestionLog).filter(
+            ChatQuestionLog.id == rating.question_id,
+            ChatQuestionLog.user_id == user.id
+        ).first()
+        
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Update the rating
+        question.rating = rating.rating
+        db.commit()
+        
+        return {"status": "success", "message": f"Question rated as {rating.rating}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error rating question: {str(e)}")
 
 # --- Temporary File Handling ---
 TEMP_UPLOADS_DIR = "temp_uploads"
@@ -969,14 +1113,14 @@ async def get_user_from_session(sid):
 
 # --- Helper function to log chat questions ---
 async def log_chat_question(sid, question_text):
-    """Log a chat question to the database."""
+    """Log a chat question to the database and return the question ID."""
     try:
         if sid not in sessions:
-            return
+            return None
         
         user_id = sessions[sid].get("user_id")
         if not user_id:
-            return
+            return None
         
         # Create chat question log entry
         db = next(get_db())
@@ -989,11 +1133,20 @@ async def log_chat_question(sid, question_text):
             )
             db.add(question_log)
             db.commit()
+            
+            # Store the question ID in the session for this message
+            if sid in sessions:
+                if "current_question_id" not in sessions[sid]:
+                    sessions[sid]["current_question_id"] = None
+                sessions[sid]["current_question_id"] = question_log.id
+            
             print(f"Chat question logged for user {user_id}: {question_text[:50]}...")
+            return question_log.id
         finally:
             db.close()
     except Exception as e:
         print(f"Error logging chat question: {e}")
+        return None
 
 # --- Socket.IO Event Handlers ---
 @sio.event
@@ -1158,6 +1311,7 @@ async def handle_python_request(sid, conversation_history, file_path=None, file_
 async def stream_and_process_response(sid, generator, conversation_history, **kwargs):
     """A generic function to handle the streaming and processing of a generator's response."""
     assistant_response = {"role": "assistant", "content": ""}
+    question_id = kwargs.get("question_id")  # Get the question ID from kwargs
     try:
         # Validate inputs
         if not sid:
@@ -1232,6 +1386,15 @@ async def stream_and_process_response(sid, generator, conversation_history, **kw
                         # This ensures that after a direct answer, the mode is reset.
                         if sid in sessions:
                             sessions[sid]["source_mode"] = payload.get("source_mode")
+                            # Add the current question_id to the payload
+                            if "current_question_id" in sessions[sid]:
+                                payload["question_id"] = sessions[sid]["current_question_id"]
+                        
+                        # Add the question_id to the assistant response for rating
+                        if question_id:
+                            assistant_response["questionId"] = question_id
+                            payload["question_id"] = question_id
+                        
                         await sio.emit("answer_meta", payload, to=sid)
                     else:
                         print(f"Warning: meta payload is not a dict: {payload}")
@@ -1300,20 +1463,24 @@ async def chat_message(sid, data):
             await sio.emit("error", {"message": "No message provided."}, to=sid)
             return
 
-        # Log the chat question
-        await log_chat_question(sid, prompt)
+        # Log the chat question and get the question ID
+        question_id = await log_chat_question(sid, prompt)
 
         sessions[sid]["messages"].append({"role": "user", "content": prompt})
+        
+        # Get user information for domain-based access control
+        user = await get_user_from_session(sid)
         
         generator = logic.process_new_question(
             sid=sid,
             conversation_history=sessions[sid]["messages"].copy(),  # Pass a copy to avoid reference issues
             source_mode=sessions[sid].get("source_mode"),
             selected_fields=selected_fields,
-            image_b64=image_b64 # Pass the image data to the logic layer
+            image_b64=image_b64, # Pass the image data to the logic layer
+            user=user  # Pass user information for domain-based access control
         )
         
-        await stream_and_process_response(sid, generator, sessions[sid]["messages"])
+        await stream_and_process_response(sid, generator, sessions[sid]["messages"], question_id=question_id)
     except Exception as e:
         error_message = f"An error occurred in chat_message: {e}"
         print(f"Error in chat_message for session {sid}: {e}")

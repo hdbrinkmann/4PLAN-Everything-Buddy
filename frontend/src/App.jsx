@@ -31,6 +31,8 @@ import newDialogIcon from '../trash.png'; // Using trash icon for New Dialog
 import updateKBIcon from '../update_DB.png';
 import knowledgeFieldsIcon from '../brain.png'; // Using brain icon for Knowledge Fields
 import runningGif from '../running.gif'; // Import the running GIF
+import goodIcon from '../good.png'; // Import the good icon
+import badIcon from '../bad.png'; // Import the bad icon
 import FavoritesPanel from './FavoritesPanel';
 import HistoryPanel from './HistoryPanel';
 import ConfirmDialog from './ConfirmDialog';
@@ -94,6 +96,7 @@ function MainContent() {
     const [lastImageB64, setLastImageB64] = useState(null); // State for the last generated image
     const [loadedHistoryId, setLoadedHistoryId] = useState(null); // Track loaded history entry to delete later
     const [isAwaitingClarification, setIsAwaitingClarification] = useState(false);
+    const [messageRatings, setMessageRatings] = useState({}); // Track ratings for messages
     const isCancellingRef = useRef(isCancelling);
     const processingMessageIdRef = useRef(null); // Use a ref to avoid stale state in socket listener
     const messagesEndRef = useRef(null);
@@ -261,7 +264,8 @@ function MainContent() {
                         role: 'assistant',
                         content: '',
                         ...data,
-                        isComplete: false
+                        isComplete: false,
+                        questionId: data.question_id // Store the question ID for rating
                     };
                     setMessages(prev => [...prev, newAssistantMessage]);
                 });
@@ -1101,6 +1105,57 @@ function MainContent() {
         }
     };
 
+    const handleRateAnswer = async (messageIndex, rating) => {
+        try {
+            // Get the question ID from the assistant message itself
+            const assistantMessage = messages[messageIndex];
+            console.log('Attempting to rate message:', assistantMessage);
+            
+            if (!assistantMessage || assistantMessage.role !== 'assistant') {
+                console.error('Message is not an assistant message');
+                return;
+            }
+
+            const questionId = assistantMessage.questionId;
+            console.log('Question ID found:', questionId);
+            
+            if (!questionId) {
+                console.error('Question ID not found for rating - this may be an older message');
+                // Show a visual feedback that rating is not available for this message
+                setStatus('Rating not available for this message');
+                return;
+            }
+
+            const response = await fetch(`${API_URL}/chat_questions/rate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    question_id: questionId,
+                    rating: rating
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to rate answer');
+            }
+
+            // Update the local state to show the rating was successful
+            setMessageRatings(prev => ({
+                ...prev,
+                [messageIndex]: rating
+            }));
+
+            console.log(`Answer rated as ${rating}`);
+            setStatus(`Answer rated as ${rating}`);
+        } catch (error) {
+            console.error('Error rating answer:', error);
+            setStatus(`Error: ${error.message}`);
+        }
+    };
+
     const isChatDisabled = !socket || status.includes('Thinking') || status.includes('Updating') || status.includes('Uploading') || isRecording || isProcessingRag || isAwaitingClarification;
 
     // Generate dynamic file accept string based on available features
@@ -1344,6 +1399,27 @@ function MainContent() {
                                      </div>
                                 )}
                             </div>
+                            {/* Rating buttons for assistant messages */}
+                            {msg.role === 'assistant' && msg.isComplete && !msg.isError && msg.content && (
+                                <div className="rating-buttons">
+                                    <button 
+                                        onClick={() => handleRateAnswer(index, 'good')}
+                                        className={`rating-btn ${messageRatings[index] === 'good' ? 'rated good' : ''}`}
+                                        disabled={messageRatings[index] && messageRatings[index] !== 'good'}
+                                        title="Rate this answer as good"
+                                    >
+                                        <img src={goodIcon} alt="Good" />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleRateAnswer(index, 'poor')}
+                                        className={`rating-btn ${messageRatings[index] === 'poor' ? 'rated poor' : ''}`}
+                                        disabled={messageRatings[index] && messageRatings[index] !== 'poor'}
+                                        title="Rate this answer as poor"
+                                    >
+                                        <img src={badIcon} alt="Poor" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ))}
                     {isThinking && (

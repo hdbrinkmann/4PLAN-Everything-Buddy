@@ -249,6 +249,7 @@ body, html {
 
 .chat-message {
   display: flex;
+  flex-direction: column;
   /* max-width is now handled by more specific rules */
 }
 
@@ -920,4 +921,56 @@ body, html {
   display: inline-block;
   padding: 5px;
   background-color: transparent; /* The inner container has the color */
+}
+
+/* --- Rating Buttons --- */
+.rating-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 8px;
+  margin-left: auto;
+  width: fit-content;
+}
+
+.rating-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rating-btn:hover:not(:disabled) {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.rating-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.rating-btn.rated {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.rating-btn.rated.good {
+  background-color: rgba(76, 175, 80, 0.2);
+}
+
+.rating-btn.rated.poor {
+  background-color: rgba(244, 67, 54, 0.2);
+}
+
+.rating-btn img {
+  width: 20px;
+  height: 20px;
 }
