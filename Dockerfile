@@ -46,7 +46,9 @@ COPY *.py ./
 COPY *.json ./
 COPY *.txt ./
 COPY Documents/ ./Documents/
-COPY vector_store/ ./vector_store/
+
+# Create vector_store directory (will be managed by persistent volume)
+RUN mkdir -p vector_store
 
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
