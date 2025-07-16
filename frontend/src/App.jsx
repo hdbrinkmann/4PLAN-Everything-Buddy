@@ -278,6 +278,13 @@ function MainContent() {
                     });
                 });
 
+                newSocket.on('generation_cancelled', () => {
+                    console.log('Generation cancelled event received');
+                    setIsCancelling(true);
+                    setIsThinking(false);
+                    setIsGenerating(false);
+                });
+
                 newSocket.on('answer_end', () => {
                     const wasCancelled = isCancellingRef.current;
                     setIsThinking(false);

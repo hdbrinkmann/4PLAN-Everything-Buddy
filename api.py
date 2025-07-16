@@ -1479,10 +1479,22 @@ async def cancel_generation(sid):
     """Handles a request to cancel the current generation."""
     print(f"Cancellation request from {sid}")
     try:
+        # Set the cancellation flag immediately
         logic.cancel_generation(sid)
+        
+        # Send immediate status update
+        await sio.emit("status", {"message": "Cancelling generation..."}, to=sid)
+        
+        # Send a special cancel event to distinguish from normal end
+        await sio.emit("generation_cancelled", to=sid)
+        
+        # Wait a brief moment for ongoing operations to check the flag
+        await asyncio.sleep(0.1)
+        
+        # Send final status and end event
         await sio.emit("status", {"message": "Generation cancelled."}, to=sid)
-        # We might also want to send a special message to the chat history
-        await sio.emit("answer_end", to=sid) # End the stream on the client
+        await sio.emit("answer_end", to=sid)
+        
     except Exception as e:
         error_message = f"An error occurred during cancellation: {e}"
         print(error_message)

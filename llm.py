@@ -92,18 +92,40 @@ MAX_CHUNK_SIZE = 4000  # Absolute maximum chunk size for embedding model
     stop=stop_after_attempt(3),
     retry=retry_if_exception_type((requests.exceptions.RequestException, ssl.SSLError))
 )
-def robust_api_call(client, model, messages, temperature, stream=False, timeout=None):
+def robust_api_call(client, model, messages, temperature, stream=False, timeout=None, cancellation_check=None):
     """
     Makes a robust API call to the Together AI client.
     Can handle both streaming and non-streaming requests.
+    Now supports cancellation checks for better responsiveness.
     """
-    return client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        stream=stream,  # Pass the stream parameter
-        timeout=timeout # Pass timeout to the API call
-    )
+    # Check for cancellation before making the API call
+    if cancellation_check and cancellation_check():
+        raise Exception("API call cancelled before execution")
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            stream=stream,  # Pass the stream parameter
+            timeout=timeout # Pass timeout to the API call
+        )
+        
+        # For streaming responses, wrap with cancellation checks
+        if stream and cancellation_check:
+            def cancellation_aware_stream():
+                for chunk in response:
+                    if cancellation_check():
+                        break
+                    yield chunk
+            return cancellation_aware_stream()
+        
+        return response
+    except Exception as e:
+        # Check if this was a cancellation during API call
+        if cancellation_check and cancellation_check():
+            raise Exception("API call cancelled during execution")
+        raise e
 
 def truncate_text(text: str, max_chars: int) -> str:
     """Trunkiert den Text auf eine maximale Zeichenlänge und behält den Anfang bei."""
@@ -1213,7 +1235,7 @@ def translate_queries_to_english(client, queries: list[str], cancellation_check=
     try:
         if cancellation_check(): return []
         # Using a specific, smaller model for the translation task as requested
-        response = robust_api_call(client, FAST_MODEL, messages, 0.2)
+        response = robust_api_call(client, FAST_MODEL, messages, 0.2, cancellation_check=cancellation_check)
         if response.choices and response.choices[0].message.content:
             translated_queries = [q.strip() for q in response.choices[0].message.content.strip().split(',')]
             return translated_queries
@@ -1408,7 +1430,7 @@ def expand_query_with_llm_optimized(client, conversation_history: list, cancella
     try:
         if cancellation_check(): return []
         # Use smaller, faster model for query expansion
-        response = robust_api_call(client, "meta-llama/Llama-3.2-3B-Instruct-Turbo", messages, 0.3)
+        response = robust_api_call(client, "meta-llama/Llama-3.2-3B-Instruct-Turbo", messages, 0.3, cancellation_check=cancellation_check)
         if cancellation_check(): return []
         if response.choices and response.choices[0].message.content:
             expanded_queries = [q.strip() for q in response.choices[0].message.content.strip().split(',')][:2]  # Limit to 2
@@ -1953,6 +1975,7 @@ async def get_answer(conversation_history: list, source_mode: str = None, select
                 # User chose to use KB anyway - proceed with vector store
                 yield {"type": "status", "data": "User chose to use Knowledge Base anyway - proceeding with available results..."}
                 determined_source_mode = "vector_store_forced"  # Special mode to skip quality evaluation
+                yield {"type": "status", "data": "DEBUG: Set determined_source_mode to vector_store_forced"}
             elif user_choice == "Do not answer now, I will reformulate my question":
                 # User chose to reformulate - end processing
                 yield {"type": "meta", "data": {"sources": "User will reformulate question", "keywords": "N/A", "follow_ups": [], "source_mode": None}}
@@ -2082,7 +2105,7 @@ Be specific and reference the previous information directly."""
             yield {"type": "meta", "data": {"sources": "Conversation Context", "keywords": "N/A", "follow_ups": follow_ups, "source_mode": determined_source_mode}}
 
             if cancellation_check(): return
-            stream = robust_api_call(client, LLM_MODEL, messages, 0.1, stream=True)
+            stream = robust_api_call(client, LLM_MODEL, messages, 0.1, stream=True, cancellation_check=cancellation_check)
             for chunk in stream:
                 if cancellation_check(): return
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -2121,7 +2144,7 @@ Be specific and reference the previous information directly."""
             yield {"type": "end"}
             return
 
-        if determined_source_mode == "vector_store":
+        if determined_source_mode == "vector_store" or determined_source_mode == "vector_store_forced":
             yield {"type": "status", "data": "Searching internal knowledge base with pure semantic search..."}
             
             # Clean approach: Pure semantic search with excellent multilingual embeddings
@@ -2192,7 +2215,7 @@ Be specific and reference the previous information directly."""
             
             # NEW: Evaluate quality of vector store results and implement fallback
             # BUT ONLY if the user hasn't already decided to use Knowledge Base anyway
-            if 'skip_quality_evaluation' in locals() and skip_quality_evaluation:
+            if determined_source_mode == "vector_store_forced":
                 # User explicitly chose to use Knowledge Base anyway - skip quality evaluation
                 yield {"type": "status", "data": "Using Knowledge Base as requested by user..."}
                 quality_eval = {"quality_sufficient": True, "reason": "User chose to use Knowledge Base anyway"}
