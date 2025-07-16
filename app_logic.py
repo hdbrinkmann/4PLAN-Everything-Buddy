@@ -6,7 +6,7 @@ from llm import (
     create_vector_store_for_document, # New
     get_answer_from_rag # New
 )
-from security import is_code_safe
+from security import is_code_safe, log_faulty_code
 import asyncio
 import os
 import traceback
@@ -326,7 +326,7 @@ class AppLogic:
         finally:
             self._reset_cancellation_flag(sid)
 
-    async def process_python_question(self, sid: str, conversation_history: list, file_path: str = None, file_header: str = None):
+    async def process_python_question(self, sid: str, conversation_history: list, file_path: str = None, file_header: str = None, user_id: int = None):
         """
         Generates and executes Python code asynchronously to answer a question.
         Handles table, text, and image outputs. Retries up to 3 times.
@@ -423,6 +423,24 @@ class AppLogic:
                     yield {"status": "security_check"}
                     is_safe, reason = is_code_safe(python_code)
                     if not is_safe:
+                        # Log the faulty code to the database
+                        if user_id:
+                            # Extract the original question from conversation history
+                            original_question = ""
+                            for msg in conversation_history:
+                                if msg.get("role") == "user":
+                                    original_question = msg.get("content", "")
+                                    break
+                            
+                            log_faulty_code(
+                                user_id=user_id,
+                                python_code=python_code,
+                                security_failure_reason=reason,
+                                original_question=original_question,
+                                session_id=sid,
+                                attempt_number=attempt + 1
+                            )
+                        
                         yield {"status": "error", "error": f"Security check failed: {reason}", "code": python_code}
                         conversation_history.append({"role": "system", "content": f"Attempt {attempt + 1} failed the security check: {reason}. You MUST generate a safe version of the code that only performs data analysis and visualization."})
                         continue # Nächsten Versuch starten
@@ -445,6 +463,25 @@ class AppLogic:
                         await process.wait()
                         error_message = "Execution timed out after 30 seconds."
                         last_error_message = error_message
+                        
+                        # Log timeout errors to the database
+                        if user_id:
+                            # Extract the original question from conversation history
+                            original_question = ""
+                            for msg in conversation_history:
+                                if msg.get("role") == "user":
+                                    original_question = msg.get("content", "")
+                                    break
+                            
+                            log_faulty_code(
+                                user_id=user_id,
+                                python_code=python_code,
+                                security_failure_reason=f"Timeout error: {error_message}",
+                                original_question=original_question,
+                                session_id=sid,
+                                attempt_number=attempt + 1
+                            )
+                        
                         conversation_history.append({"role": "system", "content": f"Attempt {attempt + 1} failed with a timeout. Please try a more efficient approach."})
                         continue
 
@@ -513,12 +550,50 @@ class AppLogic:
                     else:
                         error_message = stderr.decode().strip()
                         last_error_message = error_message
+                        
+                        # Log runtime errors to the database
+                        if user_id:
+                            # Extract the original question from conversation history
+                            original_question = ""
+                            for msg in conversation_history:
+                                if msg.get("role") == "user":
+                                    original_question = msg.get("content", "")
+                                    break
+                            
+                            log_faulty_code(
+                                user_id=user_id,
+                                python_code=python_code,
+                                security_failure_reason=f"Runtime error: {error_message}",
+                                original_question=original_question,
+                                session_id=sid,
+                                attempt_number=attempt + 1
+                            )
+                        
                         conversation_history.append({"role": "system", "content": f"Attempt {attempt + 1} failed with error: {error_message}. Please fix the code."})
                         continue
 
                 except Exception as e:
                     error_message = traceback.format_exc()
                     last_error_message = error_message
+                    
+                    # Log general exceptions to the database
+                    if user_id:
+                        # Extract the original question from conversation history
+                        original_question = ""
+                        for msg in conversation_history:
+                            if msg.get("role") == "user":
+                                original_question = msg.get("content", "")
+                                break
+                        
+                        log_faulty_code(
+                            user_id=user_id,
+                            python_code=python_code,
+                            security_failure_reason=f"Exception: {str(e)}",
+                            original_question=original_question,
+                            session_id=sid,
+                            attempt_number=attempt + 1
+                        )
+                    
                     conversation_history.append({"role": "system", "content": f"Attempt {attempt + 1} failed with an exception: {error_message}. Please fix the code."})
                     continue
                 finally:

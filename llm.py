@@ -12,7 +12,7 @@ import time
 import logging
 from datetime import datetime
 from bs4 import BeautifulSoup
-from googlesearch import search
+# Removed googlesearch import - replaced with Brave Search API
 from together import Together
 from dotenv import load_dotenv
 from langchain_core.documents import Document
@@ -1281,27 +1281,7 @@ def create_contextual_messages(conversation_history: list, system_prompt: str) -
         messages.append({"role": msg["role"], "content": msg["content"]})
     return messages
 
-def translate_queries_to_english(client, queries: list[str], cancellation_check=lambda: False) -> list[str]:
-    """Translates a list of queries to English using an LLM."""
-    system_prompt = "You are a highly skilled translator. Your task is to translate the following comma-separated list of search queries accurately from German to English. Return only the comma-separated list of the translated queries."
-    
-    queries_string = ", ".join(queries)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": queries_string}
-    ]
-    
-    try:
-        if cancellation_check(): return []
-        # Using a specific, smaller model for the translation task as requested
-        response = robust_api_call(client, FAST_MODEL, messages, 0.2, cancellation_check=cancellation_check)
-        if response.choices and response.choices[0].message.content:
-            translated_queries = [q.strip() for q in response.choices[0].message.content.strip().split(',')]
-            return translated_queries
-        return []
-    except Exception as e:
-        print(f"Error during query translation: {e}")
-        return []
+# translate_queries_to_english function removed - no longer needed with Brave Search API
 
 def detect_and_expand_abbreviations(text: str) -> list[str]:
     """
@@ -1881,6 +1861,77 @@ def scrape_website_content(url: str) -> str:
         cache_content(url, error_msg)
         return error_msg
 
+def brave_search(query: str, num_results: int = 10, country: str = "DE") -> list:
+    """
+    Performs web search using Brave Search API.
+    Returns a list of URLs from the search results.
+    Falls back gracefully if API key is invalid or API fails.
+    """
+    api_key = os.getenv("BRAVE_SEARCH_API_KEY")
+    if not api_key:
+        print("BRAVE_SEARCH_API_KEY not found in environment variables.")
+        return []
+    
+    url = "https://api.search.brave.com/res/v1/web/search"
+    headers = {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": api_key
+    }
+    
+    # Simplified parameters to avoid 422 errors
+    params = {
+        "q": query,
+        "count": min(num_results, 20),  # Limit to max 20 results
+        "safesearch": "moderate"
+    }
+    
+    # Only add country parameter if not default
+    if country != "DE":
+        params["country"] = country
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        
+        # Handle specific API errors
+        if response.status_code == 422:
+            try:
+                error_data = response.json()
+                if error_data.get("error", {}).get("code") == "SUBSCRIPTION_TOKEN_INVALID":
+                    print("ERROR: Brave Search API key is invalid. Please check your BRAVE_SEARCH_API_KEY in the .env file.")
+                    print("You can get a free API key from: https://brave.com/search/api/")
+                    return []
+                else:
+                    print(f"Brave Search API error: {error_data.get('error', {}).get('detail', 'Unknown error')}")
+                    return []
+            except json.JSONDecodeError:
+                print(f"Brave Search API returned HTTP 422 with non-JSON response")
+                return []
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Extract URLs from search results
+        results = []
+        if "web" in data and "results" in data["web"]:
+            for result in data["web"]["results"]:
+                if "url" in result and result["url"]:
+                    results.append(result["url"])
+        
+        print(f"Brave Search: Successfully retrieved {len(results)} results")
+        return results
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Brave Search API request failed: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse Brave Search API response: {e}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error in Brave Search: {e}")
+        return []
+
 def cleanup_expired_cache():
     """
     Removes expired cache files from the cache directory.
@@ -2366,14 +2417,14 @@ Be specific and reference the previous information directly."""
             yield {"type": "status", "data": "Extracting context keywords from conversation..."}
             context_keywords = await asyncio.to_thread(extract_context_keywords, client, conversation_history)
             
-            # Get German queries
-            german_queries = await asyncio.to_thread(expand_query_with_llm, client, conversation_history)
+            # Get search queries in the user's language
+            search_queries = await asyncio.to_thread(expand_query_with_llm, client, conversation_history)
             
             # Enhance queries with context keywords (with validation)
             if context_keywords:
                 yield {"type": "status", "data": f"Enhancing search with context: {', '.join(context_keywords[:3])}..."}
-                enhanced_german_queries = []
-                for query in german_queries:
+                enhanced_queries = []
+                for query in search_queries:
                     # Clean and validate context keywords
                     clean_keywords = []
                     for keyword in context_keywords[:3]:
@@ -2385,55 +2436,40 @@ Be specific and reference the previous information directly."""
                     # Add context keywords only if they don't make the query too long
                     if clean_keywords:
                         enhanced_query = f"{query} {' '.join(clean_keywords)}"
-                        # Limit query length to prevent Google search errors
+                        # Limit query length to prevent search errors
                         if len(enhanced_query) <= 200:
-                            enhanced_german_queries.append(enhanced_query)
+                            enhanced_queries.append(enhanced_query)
                         else:
-                            enhanced_german_queries.append(query)  # Use original if too long
+                            enhanced_queries.append(query)  # Use original if too long
                     else:
-                        enhanced_german_queries.append(query)
-                german_queries = enhanced_german_queries
+                        enhanced_queries.append(query)
+                search_queries = enhanced_queries
             
-            yield {"type": "status", "data": "Translating search queries to English..."}
-            
-            # Translate queries to English
-            if cancellation_check(): return
-            english_queries = await asyncio.to_thread(translate_queries_to_english, client, german_queries, cancellation_check)
-
-            # Perform searches in parallel for better performance (reduced to 3 results per language)
-            yield {"type": "status", "data": "Performing optimized parallel searches..."}
+            # Perform optimized search with Brave Search API (no translation needed)
+            yield {"type": "status", "data": "Performing optimized Brave Search..."}
             if cancellation_check(): return
             
-            german_search_query = ", ".join(german_queries)
-            english_search_query = ", ".join(english_queries) if english_queries else ""
+            search_query = ", ".join(search_queries)
             
-            # Run searches in parallel with error handling
-            tasks = []
-            
-            # Validate and clean search queries before execution
+            # Validate and clean search query before execution
             def clean_search_query(query):
                 # Remove special characters that might cause issues
                 cleaned = re.sub(r'[^\w\s\-\.\,\?\!]', '', query.strip())
                 # Limit length to prevent errors
                 return cleaned[:200] if len(cleaned) > 200 else cleaned
             
-            clean_german_query = clean_search_query(german_search_query)
-            clean_english_query = clean_search_query(english_search_query) if english_search_query else ""
+            clean_query = clean_search_query(search_query)
             
-            # Execute searches with error handling (reduced to 3 results per language)
+            # Execute search with error handling using Brave Search API
             try:
-                if clean_german_query:
-                    tasks.append(asyncio.create_task(asyncio.to_thread(list, search(clean_german_query, num_results=3, lang="de"))))
-                if clean_english_query:
-                    tasks.append(asyncio.create_task(asyncio.to_thread(list, search(clean_english_query, num_results=3, lang="en"))))
-                
-                if not tasks:
+                if clean_query:
+                    # Use more results since we're only doing one search now
+                    search_results = await asyncio.to_thread(brave_search, clean_query, num_results=6, country="DE")
+                else:
                     yield {"type": "meta", "data": {"sources": "No sources", "keywords": "Invalid search query", "follow_ups": []}}
                     yield {"type": "chunk", "data": "Search query could not be processed due to invalid characters or length."}
                     yield {"type": "end"}
                     return
-                
-                search_results = await asyncio.gather(*tasks)
                 
             except Exception as search_error:
                 yield {"type": "status", "data": f"Search API error: {str(search_error)[:100]}..."}
@@ -2442,21 +2478,10 @@ Be specific and reference the previous information directly."""
                 yield {"type": "end"}
                 return
             
-            # Process German results (reduced to 3)
-            raw_german_results = search_results[0]
-            german_urls = [url for url in raw_german_results if (url.startswith('http://') or url.startswith('https://')) and 'google.com/search' not in url][:3]
+            # Filter valid URLs
+            search_results = [url for url in search_results if (url.startswith('http://') or url.startswith('https://')) and 'google.com/search' not in url]
             
-            # Process English results (reduced to 3)
-            english_urls = []
-            if len(search_results) > 1:
-                raw_english_results = search_results[1]
-                english_urls = [url for url in raw_english_results if (url.startswith('http://') or url.startswith('https://')) and 'google.com/search' not in url][:3]
-
-            # Combine and deduplicate results (now max 6 instead of 8)
-            all_urls = german_urls + english_urls
-            search_results = sorted(list(set(all_urls)))
-            
-            web_search_query = f"DE: {german_search_query} | EN: {', '.join(english_queries) if english_queries else ''}"
+            web_search_query = search_query
 
             if not search_results:
                 yield {"type": "meta", "data": {"sources": "No sources", "keywords": web_search_query, "follow_ups": []}}
@@ -2599,10 +2624,135 @@ def get_python_code(conversation_history: list, file_path: str = None, cancellat
         
         base_system_prompt = """You are an expert Python programmer and a helpful assistant. Your task is to write a Python script to answer the user's question and also provide a simple, natural language explanation of how the script works.
 
-**Output Format:**
-You **MUST** respond with a single, valid JSON object. This JSON object must have two keys:
-1.  `"python_code"`: A string containing the complete, raw Python script.
-2.  `"explanation"`: A string containing a user-friendly explanation in German.
+**CRITICAL: COMPLETE CODE ONLY - NO PARTIAL CODE ALLOWED**
+- Your Python script MUST be complete and executable from start to finish
+- DO NOT generate partial code, code snippets, or incomplete scripts
+- The script must produce EXACTLY ONE final output statement
+- If you cannot create complete code, return empty python_code with explanation
+- NO CODE WITHOUT FINAL OUTPUT STATEMENT!
+
+**CRITICAL CODE FORMATTING RULES - ABSOLUTELY NO LINE NUMBERS:**
+- Generate ONLY executable Python code with ABSOLUTELY NO line numbers
+- NO prefixes, suffixes, annotations, or any formatting in the code
+- NO markdown formatting within the python_code string
+- Code must be completely clean and executable as-is
+- NO text like "```python" or "```" in the python_code field
+- NEVER EVER include line numbers like "1", "2", "3", etc. at the beginning of lines
+- Code must start directly with import statements, no numbering
+- EXAMPLE OF FORBIDDEN: "2import pandas as pd" - NEVER DO THIS
+- EXAMPLE OF CORRECT: "import pandas as pd" - ALWAYS DO THIS
+
+**CRITICAL: FOLLOW TECHNICAL NOTES EXACTLY:**
+- You will receive technical notes with specific file paths and column names
+- You MUST use the exact directory path provided in technical notes
+- NEVER use hardcoded paths like 'temp_images/' or '/tmp/'
+- The technical notes contain the correct session-specific directory
+- Look for technical notes containing directory instructions and use them exactly
+
+**MANDATORY OUTPUT PATHS:**
+- FOR CHARTS: Use the EXACT directory path provided in technical notes
+- NEVER use relative paths or hardcoded directories  
+- The system provides session-specific directories to prevent conflicts
+- Example: If technical notes say "save to '/tmp/4plan_sessions/abc123/images/'", use that exact path
+- FOR TABLES: Use print() to stdout only
+
+**OUTPUT DECISION LOGIC (TABLE-FIRST APPROACH):**
+- DEFAULT: Create a table (JSON output) unless user explicitly requests visualization
+- CHARTS ONLY when user specifically asks for: "chart", "graph", "plot", "visualization", "diagram", "grafik", "diagramm"
+- When in doubt, choose table format - tables are safer and more expected
+- Tables are better for data analysis, charts for visual presentation
+
+**MANDATORY FINAL OUTPUT STATEMENT - CRITICAL RULE:**
+Every Python script MUST end with EXACTLY ONE final output statement and NOTHING ELSE:
+- FOR TABLES: `print(your_dataframe.to_json(orient='split', index=False))`
+- FOR CHARTS: `fig.write_html('EXACT_PATH_FROM_TECHNICAL_NOTES')`
+
+**ABSOLUTELY FORBIDDEN - THESE WILL CAUSE EXECUTION FAILURE:**
+- Multiple fig.write_html() calls (NEVER do: fig.write_html() AND fig_trend.write_html())
+- Multiple print() statements (NEVER do: print() AND print())
+- Mixing chart output with print output (NEVER do: fig.write_html() AND print())
+- Any code after the final output statement
+- Creating multiple charts in one script (NEVER create both fig AND fig_trend)
+- NEVER create variables like fig_trend, fig2, etc. - only ONE fig variable allowed
+- NEVER analyze different aspects separately - choose ONE output type only
+
+**EXAMPLE OF FORBIDDEN CODE THAT WILL FAIL:**
+```python
+# This code will FAIL because it has 3 output statements:
+fig.write_html('/path/plot1.html')              # ← OUTPUT 1
+fig_trend.write_html('/path/plot2.html')        # ← OUTPUT 2  
+print(summary_df.to_json(orient='split'))       # ← OUTPUT 3
+# NEVER DO THIS! Only ONE output statement allowed!
+```
+
+**CRITICAL DECISION RULE:**
+- If user wants charts: Create ONE chart only, end with ONE fig.write_html()
+- If user wants tables: Create ONE table only, end with ONE print()
+- NEVER try to provide both charts and tables in same script
+- NEVER create multiple visualizations in same script
+- Choose the MOST IMPORTANT output only
+- If user asks for "outliers AND trends", choose either outliers OR trends, not both
+
+**SECURITY RESTRICTIONS - FORBIDDEN MODULES & FUNCTIONS:**
+- **NEVER import or use these modules**: os, subprocess, shutil, sys, glob, socket, requests, urllib, http, ctypes, multiprocessing
+- **NEVER use these functions**: eval(), exec()
+- **NEVER use file operations in write/append mode**: open(file, 'w'), open(file, 'a'), mode='w', mode='a'
+- **ALLOWED modules**: pandas, numpy, plotly, matplotlib (for visualization), json, re, datetime, math
+
+**ERROR PREVENTION:**
+- Always handle division by zero with proper checks using numpy.where() or pandas.where()
+- Use .fillna(0) for missing values in calculations
+- Ensure proper string cleaning for German number formats (€, commas, dots)
+- The system already creates all necessary directories - do NOT use os.makedirs()
+- Use try/except blocks for file operations
+- For per-FTE calculations, use vectorized operations: df['result'] = np.where(df['FTE'] != 0, df['value'] / df['FTE'], 0)
+- Never use .apply() with lambda functions for division - use vectorized operations instead
+
+**CRITICAL: UNDERSTAND THE RESPONSE FORMAT COMPLETELY:**
+
+You must respond with a JSON object that has TWO separate fields:
+1. `"python_code"`: Contains ONLY executable Python code (NO JSON, NO curly braces, NO quotes around the code)
+2. `"explanation"`: Contains the German explanation text
+
+**THE PYTHON CODE FIELD MUST CONTAIN ONLY PYTHON CODE - NOTHING ELSE!**
+
+**WHAT HAPPENS TO YOUR RESPONSE:**
+- The app takes your JSON response
+- Extracts the `python_code` field 
+- Executes that code directly as Python
+- Shows the `explanation` field to the user
+
+**CRITICAL ERROR - DO NOT PUT JSON INSIDE PYTHON CODE:**
+The python_code field should contain ONLY executable Python code like this:
+```python
+import pandas as pd
+df = pd.read_csv('FILE_PATH')
+result = df.groupby('column').sum()
+print(result.to_json(orient='split', index=False))
+```
+
+**NEVER PUT THIS IN THE PYTHON CODE FIELD:**
+```python
+{
+  "python_code": "import pandas as pd...",
+  "explanation": "This does something"
+}
+```
+^ This is WRONG! This JSON belongs in your response structure, NOT in the python_code field!
+
+**CORRECT RESPONSE FORMAT:**
+```json
+{
+  "python_code": "import pandas as pd\ndf = pd.read_csv('FILE_PATH')\nresult = df.groupby('column').sum()\nprint(result.to_json(orient='split', index=False))",
+  "explanation": "Ich habe die Daten gruppiert und summiert."
+}
+```
+
+**REMEMBER:** 
+- python_code field = ONLY executable Python code
+- explanation field = German explanation text
+- Your overall response = JSON with these two fields
+- The app will execute the python_code field directly as Python
 
 **Sonderfall: Nicht umsetzbare Fragen:**
 - Wenn die Frage des Benutzers zu allgemein ist oder keine spezifische Datenauswertung erfordert (z.B. "Was ist das für eine Datei?", "Erzähl mir was über die Daten"), dann darfst du **KEINEN** Python-Code erzeugen.
@@ -2610,13 +2760,34 @@ You **MUST** respond with a single, valid JSON object. This JSON object must hav
   `"python_code": ""` (ein leerer String)
   `"explanation": "Ihre Frage kann nicht in eine konkrete Datenauswertung umgewandelt werden. Bitte beachten Sie, dass bei Tabellen-Dateien nur spezifische Auswertungen per Python-Skript möglich sind."`
 
+**COMPLETE CODE EXAMPLES:**
+
+MOST COMMON - Table Output (DEFAULT):
+```python
+import pandas as pd
+df = pd.read_csv('FILE_PATH')
+# Process data (grouping, filtering, calculations)
+result = df.groupby('Category').sum()
+print(result.to_json(orient='split', index=False))
+```
+
+ONLY WHEN EXPLICITLY REQUESTED - Chart Output:
+```python
+import pandas as pd
+import plotly.express as px
+df = pd.read_csv('FILE_PATH')
+fig = px.bar(df, x='Category', y='Value', title='Chart Title')
+# Use exact path from technical notes - system creates directories automatically
+fig.write_html('/exact/path/from/technical/notes/plot.html')
+```
+
 **Rules for `"python_code"`:**
 - The script's output must be either a JSON table (`your_dataframe.to_json(orient='split', index=False)`) or an HTML file for charts.
-- **All charts MUST be generated using the `plotly` library** (e.g., `import plotly.express as px` or `import plotly.graph_objects as go`). The output MUST be saved as an HTML file (e.g., `fig.write_html('temp_images/plot.html')`). Do NOT use any other plotting library.
+- **All charts MUST be generated using the `plotly` library** (e.g., `import plotly.express as px` or `import plotly.graph_objects as go`). The output MUST be saved as an HTML file using the path from technical notes.
 - When creating a table, the script's standard output **MUST ONLY** contain the final JSON data. Do not print any other text.
 - When creating a chart, the script **MUST NOT** print anything to standard output.
 - The script must be self-contained.
-- When the user asks for a per FTE or Per Headcount calculation, you MUST calculate the sum of whatever the user wants to see on a per FTE or per Headcount basis and then divide it by the number of FTEs or Headcounts ON THE LEVEL OF THE GROUP. First calculate the sums and then perform the division.
+- When the user asks for a per FTE or Per Headcount calculation, you MUST calculate the sum of whatever the user wants to see on a per FTE or per Headcount basis and then divide it by the number of FTEs or Headcounts ON THE LEVEL OF THE GROUP. First calculate the sums and then perform the division. NEVER divide on row level first. ALWAYS use groupby().agg() to sum first, then divide the aggregated value
 
 **Rules for `"explanation"`:**
 - Explain how the result was calculated in simple, non-technical German.
@@ -2625,6 +2796,26 @@ You **MUST** respond with a single, valid JSON object. This JSON object must hav
 - **DO NOT** use any Python syntax (e.g., no `df.groupby`, no function names).
 - Write as if you are explaining the process to someone who does not know programming.
 - Example Explanation: "Um das Ergebnis zu ermitteln, habe ich die Daten nach der Spalte 'Abteilung' gruppiert und anschließend die Summe der Werte aus der Spalte 'Gehalt' für jede einzelne Abteilung berechnet."
+
+**BEFORE RESPONDING - SELF-VALIDATION CHECKLIST:**
+☐ Is the code complete from import to final output?
+☐ Did I choose the right output format (table vs chart)?
+☐ Does it end with print() for tables or write_html() for charts?
+☐ Can this code run without errors?
+☐ Did I default to table unless chart was explicitly requested?
+☐ No line numbers in code?
+☐ No syntax errors?
+☐ Using correct paths from technical notes?
+☐ Proper error handling for division by zero?
+
+**JSON RESPONSE MUST BE:**
+{
+  "python_code": "clean_executable_code_here",
+  "explanation": "German_explanation_here"
+}
+- NO code blocks, NO markdown in python_code
+- NO line numbers, NO formatting artifacts
+- Use exact paths from technical notes
 
 **Example JSON Response:**
 ```json

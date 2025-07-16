@@ -24,6 +24,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
     const [loginSessions, setLoginSessions] = useState([]);
     const [chatQuestions, setChatQuestions] = useState([]);
     const [userSummary, setUserSummary] = useState([]);
+    const [faultyCodeLogs, setFaultyCodeLogs] = useState([]);
     const [loadingData, setLoadingData] = useState(false);
     const [exportingData, setExportingData] = useState(false);
     
@@ -269,6 +270,28 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         }
     };
 
+    const loadFaultyCodeLogs = async () => {
+        if (!accessToken) return;
+        setLoadingData(true);
+        try {
+            const response = await fetch(getApiUrl('faulty_code_logs'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setFaultyCodeLogs(data.faulty_code_logs);
+            } else {
+                console.error('Failed to load faulty code logs:', response.status);
+            }
+        } catch (error) {
+            console.error('Error loading faulty code logs:', error);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
     // Export functions
     const exportLoginSessions = async () => {
         if (!accessToken) return;
@@ -328,6 +351,38 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
             }
         } catch (error) {
             console.error('Error exporting chat questions:', error);
+            alert('Export failed. Please try again.');
+        } finally {
+            setExportingData(false);
+        }
+    };
+
+    const exportFaultyCodeLogs = async () => {
+        if (!accessToken) return;
+        setExportingData(true);
+        try {
+            const response = await fetch(getApiUrl('export_faulty_code_logs'), {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'fehlerhafter_code.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Failed to export faulty code logs:', response.status);
+                alert('Export failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error exporting faulty code logs:', error);
             alert('Export failed. Please try again.');
         } finally {
             setExportingData(false);
@@ -430,6 +485,30 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         };
     };
 
+    const convertFaultyCodeLogsToTableFormat = (data) => {
+        return {
+            columns: ['User', 'Time', 'Cause', 'Question', 'Code', 'Security Failure', 'Attempt'],
+            data: data.map(log => {
+                // Determine cause based on security_failure_reason
+                const cause = log.security_failure_reason.toLowerCase().includes('sicherheit') || 
+                            log.security_failure_reason.toLowerCase().includes('security') ||
+                            log.security_failure_reason.toLowerCase().includes('risiko') ||
+                            log.security_failure_reason.toLowerCase().includes('verboten') ||
+                            log.security_failure_reason.toLowerCase().includes('forbidden') ? 'insecure' : 'error';
+                
+                return [
+                    log.username,
+                    formatDate(log.timestamp),
+                    cause,
+                    log.original_question.length > 100 ? log.original_question.substring(0, 100) + '...' : log.original_question,
+                    log.python_code.length > 150 ? log.python_code.substring(0, 150) + '...' : log.python_code,
+                    log.security_failure_reason,
+                    log.attempt_number.toString()
+                ];
+            })
+        };
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -492,6 +571,15 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                         }}
                     >
                         Questions
+                    </button>
+                    <button 
+                        className={`tab-btn ${activeTab === 'faulty_code' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveTab('faulty_code');
+                            loadFaultyCodeLogs();
+                        }}
+                    >
+                        Faulty Code
                     </button>
                 </div>
 
@@ -713,6 +801,20 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             )}
                         </div>
                     )}
+
+                    {activeTab === 'faulty_code' && (
+                        <div className="faulty-code-tab">
+                            {loadingData ? (
+                                <div className="loading">Loading faulty code logs...</div>
+                            ) : faultyCodeLogs.length === 0 ? (
+                                <p className="no-data">No faulty code logs available</p>
+                            ) : (
+                                <CollapsibleTable 
+                                    data={convertFaultyCodeLogsToTableFormat(faultyCodeLogs)} 
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="admin-dialog-footer">
@@ -744,8 +846,35 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             </button>
                         </>
                     )}
-                    {(activeTab === 'user_summary' || activeTab === 'login_sessions' || activeTab === 'chat_questions') && (
+                    {(activeTab === 'user_summary' || activeTab === 'login_sessions' || activeTab === 'chat_questions' || activeTab === 'faulty_code') && (
                         <>
+                            {activeTab === 'login_sessions' && (
+                                <button 
+                                    className="export-btn" 
+                                    onClick={exportLoginSessions}
+                                    disabled={exportingData}
+                                >
+                                    {exportingData ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            )}
+                            {activeTab === 'chat_questions' && (
+                                <button 
+                                    className="export-btn" 
+                                    onClick={exportChatQuestions}
+                                    disabled={exportingData}
+                                >
+                                    {exportingData ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            )}
+                            {activeTab === 'faulty_code' && (
+                                <button 
+                                    className="export-btn" 
+                                    onClick={exportFaultyCodeLogs}
+                                    disabled={exportingData}
+                                >
+                                    {exportingData ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            )}
                             <button 
                                 className="cancel-btn" 
                                 onClick={cleanupOldData}

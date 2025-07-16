@@ -4,7 +4,6 @@ uvicorn
 python-socketio
 requests
 beautifulsoup4
-googlesearch-python
 together
 langchain
 langchain-community

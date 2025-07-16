@@ -1,6 +1,8 @@
 import os
 from llm import robust_api_call, LLM_MODEL
 from together import Together
+from database import SessionLocal, FaultyCodeLog
+from datetime import datetime
 
 # --- 1. Verteidigungslinie: Statische Analyse ---
 # Liste von Modulen, deren Import generell verboten ist.
@@ -88,3 +90,28 @@ def is_code_safe(code: str) -> tuple[bool, str]:
         return False, f"Konnte Sicherheits-Service nicht initialisieren: {e}"
 
     return True, "Code hat alle Sicherheitsprüfungen bestanden."
+
+# --- Logging Function ---
+def log_faulty_code(user_id: int, python_code: str, security_failure_reason: str, original_question: str, session_id: str = None, attempt_number: int = 1):
+    """
+    Logs faulty or unsecure Python code to the database for analysis.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            faulty_code_log = FaultyCodeLog(
+                user_id=user_id,
+                python_code=python_code,
+                security_failure_reason=security_failure_reason,
+                original_question=original_question,
+                session_id=session_id,
+                attempt_number=attempt_number,
+                timestamp=datetime.utcnow()
+            )
+            db.add(faulty_code_log)
+            db.commit()
+            print(f"Faulty code logged for user {user_id}: {security_failure_reason}")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Error logging faulty code: {e}")

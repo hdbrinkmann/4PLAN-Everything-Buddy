@@ -30,7 +30,7 @@ import pinselIcon from '../pinsel.png'; // Import the brush icon
 import newDialogIcon from '../trash.png'; // Using trash icon for New Dialog
 import updateKBIcon from '../update_DB.png';
 import knowledgeFieldsIcon from '../brain.png'; // Using brain icon for Knowledge Fields
-import runningGif from '../running.gif'; // Import the running GIF
+// Remove the import and use the GIF from public directory instead
 import goodIcon from '../good.png'; // Import the good icon
 import badIcon from '../bad.png'; // Import the bad icon
 import FavoritesPanel from './FavoritesPanel';
@@ -339,7 +339,8 @@ function MainContent() {
                 });
 
                 newSocket.on('python_status', (data) => {
-                    setIsThinking(false);
+                    // Don't clear thinking state immediately for python_status
+                    // Let it continue showing the running man icon
                     setPythonStatus(data);
                     if (data.status === 'generating_code') {
                         setStatus(`Generating code (Attempt ${data.attempt})...`);
@@ -354,6 +355,7 @@ function MainContent() {
                     setPythonStatus(null);
                     setStatus('Ready');
                     setIsGenerating(false);
+                    
                     let newAssistantMessage;
                     const baseMessage = {
                         role: 'assistant',
@@ -373,12 +375,16 @@ function MainContent() {
                         newAssistantMessage = { ...baseMessage, content: `${data.output}` };
                     }
                     setMessages(prev => [...prev, newAssistantMessage]);
+                    
+                    // Clear thinking state after message is added
+                    setIsThinking(false);
                 });
 
                 newSocket.on('python_error', (data) => {
                     setPythonStatus(null);
                     setStatus('Error during Python execution. See details below.');
                     setIsGenerating(false);
+                    
                     const errorMessage = {
                         role: 'assistant',
                         content: data.error,
@@ -388,6 +394,9 @@ function MainContent() {
                         isError: true,
                     };
                     setMessages(prev => [...prev, errorMessage]);
+                    
+                    // Clear thinking state after message is added
+                    setIsThinking(false);
                 });
 
                 newSocket.on('rag_status', (data) => {
@@ -1432,7 +1441,7 @@ function MainContent() {
                                     <p>Cancelling...</p>
                                 ) : (
                                     <div className="working-indicator">
-                                        <img src={runningGif} alt="Working" className="working-gif" />
+                                        <img src="/running.gif" alt="Working" className="working-gif" />
                                         <p>Working on it...</p>
                                     </div>
                                 )}

@@ -21,6 +21,7 @@ class User(Base):
     chat_histories = relationship("ChatHistory", back_populates="user")
     login_sessions = relationship("LoginSession", back_populates="user")
     chat_questions = relationship("ChatQuestionLog", back_populates="user")
+    faulty_code_logs = relationship("FaultyCodeLog", back_populates="user")
 
 class FavoriteGroup(Base):
     __tablename__ = "favorite_groups"
@@ -82,5 +83,18 @@ class ChatQuestionLog(Base):
     rating = Column(String, nullable=True)  # 'good', 'poor', or null
     
     user = relationship("User", back_populates="chat_questions")
+
+class FaultyCodeLog(Base):
+    __tablename__ = "faulty_code_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    python_code = Column(Text)
+    security_failure_reason = Column(Text)
+    original_question = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    session_id = Column(String, nullable=True)  # Socket.IO session ID
+    attempt_number = Column(Integer, default=1)  # Which attempt this was in the retry sequence
+    
+    user = relationship("User", back_populates="faulty_code_logs")
 
 Base.metadata.create_all(bind=engine)

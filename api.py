@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 from app_logic import AppLogic
 from auth import verify_token, get_current_user
-from database import SessionLocal, User, LoginSession, ChatQuestionLog
+from database import SessionLocal, User, LoginSession, ChatQuestionLog, FaultyCodeLog
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from pydantic import BaseModel
@@ -464,6 +464,112 @@ async def get_user_summary(db: Session = Depends(get_db), user: User = Depends(g
         return {"user_summary": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching user summary: {str(e)}")
+
+@fastapi_app.get("/admin/faulty_code_logs")
+async def get_faulty_code_logs(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Gets faulty code logs for admin review."""
+    check_admin_access(user)
+    
+    try:
+        # Get all faulty code logs with user information
+        code_logs = db.query(FaultyCodeLog).join(User).order_by(desc(FaultyCodeLog.timestamp)).all()
+        
+        result = []
+        for log in code_logs:
+            result.append({
+                "id": log.id,
+                "username": log.user.username,
+                "original_question": log.original_question,
+                "python_code": log.python_code,
+                "security_failure_reason": log.security_failure_reason,
+                "timestamp": log.timestamp.isoformat(),
+                "session_id": log.session_id,
+                "attempt_number": log.attempt_number
+            })
+        
+        return {"faulty_code_logs": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching faulty code logs: {str(e)}")
+
+@fastapi_app.post("/admin/export_faulty_code_logs")
+async def export_faulty_code_logs(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Exports faulty code logs to Excel."""
+    check_admin_access(user)
+    
+    try:
+        # Get all faulty code logs with user information
+        code_logs = db.query(FaultyCodeLog).join(User).order_by(desc(FaultyCodeLog.timestamp)).all()
+        
+        if not code_logs:
+            # Return empty Excel file if no data
+            df = pd.DataFrame(columns=["User", "Time", "Cause", "Question", "Python Code", "Security Failure", "Attempt", "Session ID"])
+        else:
+            data = []
+            german_tz = pytz.timezone('Europe/Berlin')
+            
+            for log in code_logs:
+                try:
+                    # Convert UTC time to German timezone
+                    if log.timestamp.tzinfo is None:
+                        # If timestamp is naive, assume it's UTC
+                        timestamp_utc = log.timestamp.replace(tzinfo=pytz.UTC)
+                    else:
+                        timestamp_utc = log.timestamp.astimezone(pytz.UTC)
+                    
+                    timestamp_german = timestamp_utc.astimezone(german_tz)
+                    
+                    # Determine cause based on security_failure_reason
+                    cause = 'insecure' if any(keyword in str(log.security_failure_reason).lower() for keyword in 
+                                           ['sicherheit', 'security', 'risiko', 'verboten', 'forbidden']) else 'error'
+                    
+                    data.append({
+                        "User": str(log.user.username),
+                        "Time": timestamp_german.strftime("%d.%m.%Y %H:%M:%S"),
+                        "Cause": cause,
+                        "Question": str(log.original_question),
+                        "Python Code": str(log.python_code),
+                        "Security Failure": str(log.security_failure_reason),
+                        "Attempt": str(log.attempt_number),
+                        "Session ID": str(log.session_id)
+                    })
+                except Exception as item_error:
+                    print(f"Error processing faulty code log {log.id}: {item_error}")
+                    continue
+            
+            # Create DataFrame
+            df = pd.DataFrame(data)
+        
+        # Create Excel file
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Faulty Code', index=False)
+            
+            # Format the Excel file
+            workbook = writer.book
+            worksheet = writer.sheets['Faulty Code']
+            
+            # Set column widths
+            worksheet.set_column('A:A', 25)  # Benutzer
+            worksheet.set_column('B:B', 20)  # Zeitpunkt
+            worksheet.set_column('C:C', 15)  # Ursache
+            worksheet.set_column('D:D', 40)  # Originalfrage
+            worksheet.set_column('E:E', 60)  # Python Code
+            worksheet.set_column('F:F', 40)  # Sicherheitsfehler
+            worksheet.set_column('G:G', 10)  # Versuch
+            worksheet.set_column('H:H', 25)  # Session ID
+        
+        excel_buffer.seek(0)
+        
+        return StreamingResponse(
+            io.BytesIO(excel_buffer.read()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment;filename=faulty_code.xlsx"}
+        )
+    except Exception as e:
+        import traceback
+        print(f"Excel export error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error exporting faulty code logs: {str(e)}")
 
 @fastapi_app.post("/admin/export_login_sessions")
 async def export_login_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -1172,7 +1278,10 @@ async def handle_python_request(sid, conversation_history, file_path=None, file_
     try:
         assistant_response = {"role": "assistant", "content": ""}
         
-        async for result in logic.process_python_question(sid, conversation_history, file_path=file_path, file_header=file_header):
+        # Get user_id from session for logging
+        user_id = sessions[sid].get("user_id") if sid in sessions else None
+        
+        async for result in logic.process_python_question(sid, conversation_history, file_path=file_path, file_header=file_header, user_id=user_id):
             status = result.get("status")
             code = result.get("code", "")
 
