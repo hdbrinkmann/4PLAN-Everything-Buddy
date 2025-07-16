@@ -29,6 +29,10 @@
 - **Enterprise Authentication**: Azure AD integration with role-based access
 - **Real-time Communication**: WebSocket-based streaming responses
 - **Multi-format Document Support**: PDF, DOCX, Excel, CSV, TXT, SQL files
+- **Answer Rating System**: User feedback collection for response quality
+- **Voice Recognition**: German speech-to-text with silence detection
+- **Auto-save Chat History**: Intelligent conversation preservation
+- **Drag & Drop Interface**: Intuitive favorites and question management
 
 ## Architecture
 
@@ -67,17 +71,21 @@
 
 **Frontend**
 - **Framework**: React 19.1.0
-- **Build Tool**: Vite
+- **Build Tool**: Vite 4.5.3
 - **Authentication**: Azure MSAL (Microsoft Authentication Library)
-- **Real-time**: Socket.IO Client
-- **UI Components**: Material-UI, Custom Components
-- **Markdown Rendering**: react-markdown with syntax highlighting
+- **Real-time**: Socket.IO Client 4.8.1
+- **UI Components**: Material-UI 7.2.0, Custom Components, MUI X Data Grid 8.7.0
+- **Drag & Drop**: @dnd-kit/core 6.3.1, @dnd-kit/sortable 10.0.0
+- **Markdown Rendering**: react-markdown 10.1.0 with syntax highlighting
+- **Virtualization**: react-window 1.8.11, react-virtualized-auto-sizer 1.0.26
+- **File Processing**: xlsx 0.18.5 for Excel files
 
 **AI & ML**
 - **Primary LLM**: Meta Llama-4-Maverick-17B-128E-Instruct-FP8
 - **Image Model**: Meta Llama-4-Maverick-17B-128E-Instruct-FP8
 - **Image Generation**: FLUX.1-kontext-max
-- **Embeddings**: BAAI/bge-base-en-v1.5
+- **Embeddings**: intfloat/multilingual-e5-large-instruct (Enhanced multilingual model)
+- **Fast Model**: Meta Llama-3.2-3B-Instruct-Turbo (For analysis and translation)
 - **Re-ranking**: BAAI/bge-reranker-large
 - **Vector Store**: FAISS with optimized batching
 
@@ -119,6 +127,7 @@
 - `get_answer_from_rag()`: RAG pipeline execution
 - `generate_image()`: AI image generation with refinement
 - `get_python_code()`: Secure code generation
+- `rate_answer()`: Answer quality feedback collection
 
 ### 3. API Layer (`api.py`)
 
@@ -149,6 +158,9 @@ POST /chat_history/         # Save chat session
 GET  /chat_history/{id}     # Load specific chat
 DELETE /chat_history/{id}   # Delete chat
 
+# Answer Rating
+POST /chat_questions/rate   # Rate answer quality
+
 # Export
 POST /export/pdf            # Generate PDF reports
 ```
@@ -169,6 +181,11 @@ POST /export/pdf            # Generate PDF reports
 'python_result'            # Code execution results
 'image'                    # Generated images
 'status'                   # System status updates
+'clarification'            # Clarification questions
+'generation_cancelled'     # Generation cancellation
+'rag_status'               # RAG processing status
+'python_status'            # Python execution status
+'python_error'             # Python execution errors
 ```
 
 ## AI Engine
@@ -521,8 +538,11 @@ CREATE TABLE chat_messages (
 **Chat Interface**:
 - Message rendering with markdown support
 - File upload integration
-- Voice input support (Web Speech API)
+- Voice input support (Web Speech API) with German recognition
 - Real-time typing indicators
+- Answer rating buttons (good/poor feedback)
+- Auto-resizing text input with multi-line support
+- Cancellation support for long-running operations
 
 **Document Viewers**:
 - `CollapsibleTable`: Sortable data tables
@@ -532,8 +552,10 @@ CREATE TABLE chat_messages (
 
 **Management Panels**:
 - `FavoritesPanel`: Question organization with drag-and-drop
-- `HistoryPanel`: Chat session management
+- `HistoryPanel`: Chat session management with auto-save
 - `AdminDialog`: System administration interface
+- `ConfirmDialog`: Confirmation dialogs for critical operations
+- `MultiSelectDropdown`: Knowledge field selection with multi-select
 
 ### State Management
 
@@ -547,23 +569,29 @@ const [isGenerating, setIsGenerating] = useState(false);
 ```
 
 **Session Persistence**:
-- Automatic chat history saving
+- Automatic chat history saving with intelligent detection
 - Knowledge field preferences
 - Admin privilege caching
+- Answer ratings persistence
+- Loaded history tracking for deletion
 
 ### Real-time Features
 
 **Voice Input**:
-- German language speech recognition
-- Automatic silence detection
+- German language speech recognition (de-DE)
+- Automatic silence detection with 1-second delay
 - Visual recording indicators
 - Text-to-speech responses
+- Voice-triggered automatic sending
+- Continuous listening with interim results
 
 **File Handling**:
-- Client-side image resizing
+- Client-side image resizing (max 2048px dimension)
 - Progress indicators for large files
-- Format validation
-- Preview generation
+- Dynamic format validation based on enabled features
+- Preview generation for images
+- Drag-and-drop file upload
+- Multi-format support detection
 
 ## Real-time Communication
 
@@ -630,6 +658,27 @@ RUN pip install -r requirements.txt
 COPY --from=frontend-build /app/dist ./frontend/dist
 ```
 
+**Resource Limits**:
+```yaml
+# Docker Compose resource optimization
+mem_limit: 4g
+memswap_limit: 16g
+cpus: '4.0'
+```
+
+**Volume Mounts**:
+```yaml
+volumes:
+  - ./ssl:/app/ssl
+  - ./.env:/app/.env:ro
+  - ./Documents:/app/Documents:ro
+  - ./vector_store:/app/vector_store
+  - ./favorites.db:/app/favorites.db
+  - ./admins.json:/app/admins.json
+  - ./features.json:/app/features.json
+  - ./knowledge_fields.json:/app/knowledge_fields.json
+```
+
 **Environment Setup**:
 ```bash
 # Development
@@ -669,7 +718,11 @@ openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 3
 ├── Documents/           # Knowledge base documents
 ├── vector_store/        # FAISS indices
 ├── temp_uploads/        # Temporary file storage
-└── ssl/                # SSL certificates
+├── ssl/                # SSL certificates
+├── favorites.db         # User favorites database
+├── features.json        # Feature configuration
+├── admins.json          # Admin user configuration
+└── knowledge_fields.json # Knowledge field definitions
 ```
 
 ## Configuration
@@ -771,7 +824,7 @@ def load_features():
 
 **Vector Store Optimizations**:
 - Batch embedding generation (64 documents per batch)
-- Optimized chunking parameters (1000 chars + 300 overlap)
+- Adaptive chunking based on document size and complexity
 - Cross-encoder re-ranking for top results only
 - Memory management with garbage collection
 
@@ -782,10 +835,18 @@ def load_features():
 - Abbreviated term expansion
 
 **Frontend Optimizations**:
-- Client-side image resizing before upload
+- Client-side image resizing before upload (max 2048px)
 - Lazy loading for large chat histories
 - WebSocket connection pooling
 - Automatic textarea resizing
+- Virtualized rendering for large datasets
+- React 19.1.0 performance improvements
+
+**Resource Management**:
+- Docker resource limits (4GB RAM, 16GB swap, 4 CPU cores)
+- Automatic cleanup of temporary files
+- Session state optimization
+- Memory-efficient large file processing
 
 ---
 
@@ -808,5 +869,18 @@ def load_features():
 - Session cleanup on disconnect
 - Automatic chat history limiting (10 per user)
 - Vector store versioning and updates
+- Answer rating analytics collection
+- Feature flag management system
+- Admin privilege management
+
+### New Features (January 2025)
+- **Answer Rating System**: Users can rate responses as good or poor
+- **Enhanced Voice Recognition**: German speech-to-text with improved accuracy
+- **Auto-save Chat History**: Intelligent conversation preservation
+- **Drag & Drop Interface**: Modern UI with @dnd-kit integration
+- **Dynamic Feature Management**: Runtime feature toggle system
+- **Multi-modal Chat Enhancement**: Improved image and document handling
+- **Enhanced Security**: Multi-layer code execution protection
+- **Performance Optimizations**: React 19.1.0 and resource management improvements
 
 This specification represents the current state of the 4PLAN Everything Buddy system as of January 2025, providing a comprehensive technical overview for developers, administrators, and stakeholders.

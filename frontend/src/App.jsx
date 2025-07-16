@@ -650,6 +650,7 @@ function MainContent() {
             socket.emit('new_dialog');
         }
         setMessages([]);
+        setMessageRatings({}); // Clear message ratings for new dialog
         setUploadedFileName('');
         setUploadedFileContent('');
         setUploadedFileType('');
@@ -1021,6 +1022,7 @@ function MainContent() {
             setMessages(historyData.messages);
             setSelectedFields(historyData.selected_fields || []);
             setLoadedHistoryId(historyData.id); // Remember which history entry we loaded
+            setMessageRatings({}); // Clear message ratings when loading history
             setChatMode('knowledge_base');
             setSourceMode(null);
             setUploadedFileName('');
@@ -1061,6 +1063,7 @@ function MainContent() {
             socket.emit('clear_chat_display');
         }
         setMessages([]);
+        setMessageRatings({}); // Clear message ratings when wiping chat
         setLastImageB64(null); // Discard the image for refinement
         setStatus('Chat cleared. Ready for new conversation.');
     };
