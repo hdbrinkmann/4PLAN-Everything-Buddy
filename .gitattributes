@@ -1,0 +1,2 @@
+Documents/* filter=lfs diff=lfs merge=lfs -text
+vector_store/* filter=lfs diff=lfs merge=lfs -text

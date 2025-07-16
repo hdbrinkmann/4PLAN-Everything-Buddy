@@ -1,0 +1,72 @@
+.collapsible-sources .sources-toggle {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    width: 100%;
+    text-align: left;
+}
+
+.collapsible-sources .sources-toggle:disabled {
+    background: #f8f8f8;
+    cursor: not-allowed;
+    color: #aaa;
+}
+
+.sources-content {
+    padding: 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.source-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.source-number {
+    font-weight: bold;
+    margin-right: 10px;
+    color: #555;
+}
+
+.source-url {
+    color: #0066cc;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.source-url:hover {
+    text-decoration: underline;
+}
+
+.error-details {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    border: 1px solid #ef9a9a;
+}
+
+.error-details h4 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    color: #b71c1c;
+}
+
+.error-details pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+    font-family: monospace;
+    font-size: 0.9em;
+}

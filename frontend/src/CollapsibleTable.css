@@ -1,0 +1,50 @@
+.collapsible-table-container {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.table-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.export-button {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.export-button img {
+    height: 24px;
+    width: auto;
+    vertical-align: middle;
+    transition: opacity 0.2s;
+}
+
+.export-button:hover img {
+    opacity: 0.8;
+}
+
+.collapsible-table-button {
+    background-color: #f8f9fa;
+    color: #495057;
+    cursor: pointer;
+    padding: 12px 20px;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.collapsible-table-button:hover {
+    background-color: #e9ecef;
+}

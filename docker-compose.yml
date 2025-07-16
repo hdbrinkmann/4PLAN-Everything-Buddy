@@ -1,0 +1,129 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_TENANT_ID: ${VITE_TENANT_ID}
+        VITE_CLIENT_ID: ${VITE_CLIENT_ID}
+    ports:
+      - "443:443"
+    # Resource limits to improve vector database performance
+    mem_limit: 4g
+    memswap_limit: 16g
+    cpus: '4.0'
+    volumes:
+      # SSL certificates - persistent volume, initialized by init script
+      - ssl_data:/app/ssl
+      # Environment file - only mount if exists locally
+      - ./.env:/app/.env:ro
+      # Documents - read-only, must exist
+      - ./Documents:/app/Documents:ro
+      # Vector store - persistent data
+      - vector_data:/app/vector_store
+      # Database - persistent file
+      - db_data:/app/db_volume
+      # Configuration files - persistent
+      - config_data:/app/config_volume
+    environment:
+      - PYTHONPATH=/app
+      - FRONTEND_PATH=/app/frontend/dist
+      # Tell the app where to find persistent data
+      - DB_PATH=/app/db_volume/favorites.db
+      - CONFIG_PATH=/app/config_volume
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  # Init container to set up initial data only if not exists
+  init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ssl_data:/app/ssl
+      - vector_data:/app/vector_store
+      - db_data:/app/db_volume
+      - config_data:/app/config_volume
+      - ./:/app/source:ro
+    command: >
+      sh -c "
+        echo 'Checking and initializing application data...'
+        
+        # SSL certificates
+        if [ ! -f /app/ssl/cert.pem ] || [ ! -f /app/ssl/key.pem ]; then
+          echo 'Creating SSL certificates...'
+          mkdir -p /app/ssl
+          openssl req -x509 -newkey rsa:4096 -keyout /app/ssl/key.pem -out /app/ssl/cert.pem -days 365 -nodes -subj '/C=DE/ST=State/L=City/O=Organization/CN=localhost'
+        fi
+        
+        # Vector store
+        if [ ! -f /app/vector_store/.initialized ]; then
+          echo 'Initializing vector store...'
+          mkdir -p /app/vector_store
+          if [ -d /app/source/vector_store ]; then
+            cp -r /app/source/vector_store/* /app/vector_store/ 2>/dev/null || true
+          fi
+          touch /app/vector_store/.initialized
+        fi
+        
+        # Database
+        if [ ! -f /app/db_volume/favorites.db ]; then
+          echo 'Initializing database...'
+          mkdir -p /app/db_volume
+          if [ -f /app/source/favorites.db ]; then
+            cp /app/source/favorites.db /app/db_volume/favorites.db
+          else
+            touch /app/db_volume/favorites.db
+          fi
+        fi
+        
+        # Config files
+        mkdir -p /app/config_volume
+        
+        # Copy admins.json
+        if [ ! -f /app/config_volume/admins.json ]; then
+          if [ -f /app/source/admins.json ]; then
+            cp /app/source/admins.json /app/config_volume/admins.json
+          else
+            echo '{}' > /app/config_volume/admins.json
+          fi
+        fi
+        
+        # Copy features.json
+        if [ ! -f /app/config_volume/features.json ]; then
+          if [ -f /app/source/features.json ]; then
+            cp /app/source/features.json /app/config_volume/features.json
+          else
+            echo '{}' > /app/config_volume/features.json
+          fi
+        fi
+        
+        # Copy knowledge_fields.json
+        if [ ! -f /app/config_volume/knowledge_fields.json ]; then
+          if [ -f /app/source/knowledge_fields.json ]; then
+            cp /app/source/knowledge_fields.json /app/config_volume/knowledge_fields.json
+          else
+            echo '{}' > /app/config_volume/knowledge_fields.json
+          fi
+        fi
+        
+        echo 'Initialization complete!'
+      "
+    restart: "no"
+
+volumes:
+  ssl_data:
+    driver: local
+  vector_data:
+    driver: local
+  db_data:
+    driver: local
+  config_data:
+    driver: local

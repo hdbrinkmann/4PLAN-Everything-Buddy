@@ -1,0 +1,336 @@
+/* Favorites Panel Overlay */
+.favorites-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Using a semi-transparent black background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+/* Favorites Panel */
+.favorites-panel {
+    background-color: var(--primary-bg);
+    color: var(--text-primary);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.favorites-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.favorites-panel-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+/* Add Group Section */
+.add-group-section {
+    display: flex;
+    gap: 10px;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--secondary-bg);
+}
+
+.add-group-section input {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: var(--tertiary-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.add-group-section button {
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    background-color: var(--accent-color);
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.add-group-section button:hover {
+    background-color: #6b140e; /* Darker shade of accent */
+}
+
+/* Favorites List */
+.favorites-list {
+    overflow-y: auto;
+    padding: 10px 20px;
+    flex-grow: 1;
+}
+
+.favorite-group {
+    margin-top: 15px;
+}
+.favorite-group:first-child {
+    margin-top: 5px;
+}
+
+.group-header {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 12px;
+}
+
+.group-header h4 {
+    flex-grow: 1;
+}
+
+.group-actions {
+    margin-left: auto;
+}
+
+.group-header h4 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--accent-color);
+}
+
+.group-header input {
+    font-size: 1.1rem;
+    padding: 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--tertiary-bg);
+    color: var(--text-primary);
+}
+
+.group-actions button {
+    margin-left: 8px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--tertiary-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.group-actions button:hover {
+    background-color: #dcdfe4;
+}
+
+
+.favorite-item {
+    display: flex;
+    /* justify-content: space-between; */ /* We remove this to allow natural spacing */
+    align-items: center;
+    padding: 10px 5px;
+    border-bottom: 1px solid var(--secondary-bg);
+}
+
+.favorite-item:last-child {
+    border-bottom: none;
+}
+
+.no-favorites-text {
+    color: var(--text-secondary);
+    padding: 10px 5px;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.favorite-text {
+    cursor: pointer;
+    flex-grow: 1;
+    /* margin-right: 15px; */ /* Replaced by gap in parent */
+    color: var(--text-primary);
+    transition: color 0.2s;
+}
+
+.favorite-text:hover {
+    color: var(--accent-color);
+}
+
+.favorite-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.delete-btn {
+    background-color: #e4e6eb;
+    color: var(--text-primary);
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.2s;
+}
+
+.delete-btn:hover {
+    background-color: #dcdfe4;
+}
+
+/* Drag and Drop Styles */
+.drag-handle {
+    cursor: grab;
+    user-select: none;
+    padding: 8px;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+}
+
+.drag-handle:hover {
+    background-color: var(--secondary-bg);
+    color: var(--text-primary);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.group-drag-handle {
+    background-color: var(--tertiary-bg);
+    border: 1px solid var(--border-color);
+}
+
+.group-drag-handle:hover {
+    background-color: var(--secondary-bg);
+    border-color: var(--accent-color);
+}
+
+.favorite-item.dragging {
+    opacity: 0.8;
+    background-color: var(--secondary-bg);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    border-radius: 6px;
+    padding: 10px 15px;
+    transform: rotate(2deg);
+    z-index: 2000;
+}
+
+.favorite-group.dragging {
+    opacity: 0.8;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    border-radius: 8px;
+    transform: rotate(1deg);
+    z-index: 2000;
+}
+
+.drag-over {
+    background-color: rgba(139, 69, 19, 0.15) !important;
+    border: 3px dashed var(--accent-color) !important;
+    border-radius: 8px !important;
+}
+
+.group-questions.drag-over {
+    background-color: rgba(139, 69, 19, 0.1) !important;
+    border: 3px dashed var(--accent-color) !important;
+    border-radius: 8px !important;
+    min-height: 80px !important;
+    padding: 20px !important;
+}
+
+.favorite-group.drag-over {
+    background-color: rgba(139, 69, 19, 0.08) !important;
+    border: 3px dashed var(--accent-color) !important;
+    border-radius: 8px !important;
+}
+
+/* Drag overlay styles - ensure it appears on top */
+[data-dnd-kit-overlay] {
+    z-index: 9999 !important;
+    position: fixed !important;
+}
+
+.drag-overlay-item {
+    z-index: 9999 !important;
+    position: relative !important;
+}
+
+/* Make the entire group area more droppable */
+.group-questions {
+    padding: 15px;
+    border-left: 2px solid var(--secondary-bg);
+    min-height: 50px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.group-questions:empty {
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-indicator {
+    font-size: 0.9rem;
+    color: var(--accent-color);
+    font-weight: 500;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Improved spacing for drag handles */
+.favorite-item {
+    gap: 8px;
+}
+
+.group-header {
+    gap: 12px;
+}
+
+/* Better visual hierarchy */
+.no-favorites-text {
+    color: var(--text-secondary);
+    padding: 20px 10px;
+    font-style: italic;
+    font-size: 0.9rem;
+    text-align: center;
+    border: 2px dashed var(--border-color);
+    border-radius: 6px;
+    margin: 10px 0;
+    transition: all 0.2s ease;
+}
+
+.no-favorites-text:hover {
+    border-color: var(--accent-color);
+    background-color: rgba(139, 69, 19, 0.02);
+}
