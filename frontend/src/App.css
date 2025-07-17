@@ -3,8 +3,9 @@
 
 :root {
   --primary-bg: #ffffff;
-  --secondary-bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  --secondary-bg: linear-gradient(135deg, #f5f7fa 0%, #dee2e6 100%);
   --tertiary-bg: #ffffff;
+  --chat-bg: linear-gradient(135deg, #fafbfc 0%, #f0f2f5 100%);
   --text-primary: #050505;
   --text-secondary: #65676b;
   --accent-color: #8A1A11;
@@ -311,7 +312,7 @@ body, html {
   height: 100vh;
   min-width: 0; /* Fix for initial width calculation */
   position: relative; /* Needed for absolute positioning of the export button */
-  background: linear-gradient(135deg, #fafbfc 0%, #f0f2f5 100%);
+  background: var(--chat-bg);
 }
 
 .chat-history {
