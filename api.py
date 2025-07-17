@@ -42,9 +42,12 @@ origins = [
     "https://127.0.0.1",       # HTTPS production alternate without explicit port
     "http://localhost:5173",   # HTTP fallback for local development
     "http://127.0.0.1:8002",   # HTTP fallback
+    "*",  # Allow all origins for sub-path deployment
 ]
 
-fastapi_app = FastAPI()
+# Get base path from environment variable
+BASE_PATH = os.environ.get("BASE_PATH", "")
+fastapi_app = FastAPI(root_path=BASE_PATH)
 
 # Add CORS middleware to the FastAPI app
 fastapi_app.add_middleware(

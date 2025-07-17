@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   envPrefix: 'VITE_',
+  base: '/4PLANBuddy/',
   plugins: [react()],
   server: {
     host: 'localhost',
