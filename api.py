@@ -946,8 +946,34 @@ async def export_pdf(request: Request):
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font('Arial', '', '/System/Library/Fonts/Supplemental/Arial.ttf', uni=True)
-    pdf.set_font("Arial", size=12)
+    
+    # Try to add Unicode support with available fonts
+    try:
+        # Try different font paths for different systems
+        font_paths = [
+            '/System/Library/Fonts/Supplemental/Arial.ttf',  # macOS
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Linux
+            '/Windows/Fonts/arial.ttf',  # Windows
+        ]
+        
+        font_loaded = False
+        for font_path in font_paths:
+            try:
+                if os.path.exists(font_path):
+                    pdf.add_font('Arial', '', font_path, uni=True)
+                    font_loaded = True
+                    break
+            except:
+                continue
+        
+        if font_loaded:
+            pdf.set_font("Arial", size=12)
+        else:
+            # Fallback to built-in fonts
+            pdf.set_font("Arial", size=12)
+    except:
+        # Ultimate fallback to built-in fonts
+        pdf.set_font("Arial", size=12)
     
     pdf.set_fill_color(240, 240, 240)
     pdf.set_text_color(0, 0, 0)
