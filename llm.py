@@ -133,6 +133,7 @@ FAST_MODEL = "meta-llama/Llama-3.2-3B-Instruct-Turbo" # Fast model for analysis 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCUMENTS_PATH = os.path.join(SCRIPT_DIR, "Documents")
 VECTOR_STORE_PATH = os.path.join(SCRIPT_DIR, "vector_store")
+DOCUMENT_STRUCTURE_INDEX_PATH = os.path.join(SCRIPT_DIR, "document_structure_index.json")
 # Enhanced Chunking Strategy - Optimized for embedding model compatibility
 DEFAULT_CHUNK_SIZE = 2000  # Reduced for better embedding model compatibility
 DEFAULT_OVERLAP = 400  # Reduced overlap for better performance
@@ -412,6 +413,303 @@ def process_docx_with_headings(file_path: str) -> list[Document]:
 
 # --- Vector Store Management ---
 vector_stores = {} # Dictionary to hold multiple vector stores
+document_structure_index = {} # Global index for fast pre-screening
+
+# --- Document Structure Index for Fast Pre-Screening ---
+def create_document_structure_index(knowledge_fields: list) -> dict:
+    """
+    Creates a searchable index of document structure data for fast pre-screening.
+    This index contains all topics, processes, search terms, and metadata for quick keyword matching.
+    """
+    global document_structure_index
+    
+    index = {
+        "topics": {},           # topic -> [field1, field2, ...]
+        "processes": {},        # process -> [field1, field2, ...]
+        "search_terms": {},     # term -> [field1, field2, ...]
+        "headings": {},         # heading -> [field1, field2, ...]
+        "filenames": {},        # filename -> [field1, field2, ...]
+        "field_stats": {}       # field -> {doc_count, total_chunks, main_topics}
+    }
+    
+    print("Building document structure index for fast pre-screening...")
+    
+    for field in knowledge_fields:
+        field_path = os.path.join(DOCUMENTS_PATH, field)
+        if not os.path.isdir(field_path):
+            continue
+            
+        doc_files = get_document_list(field_path)
+        field_stats = {
+            "doc_count": len(doc_files),
+            "total_chunks": 0,
+            "main_topics": set()
+        }
+        
+        for doc_file in doc_files:
+            try:
+                # Extract document structure
+                if doc_file.lower().endswith('.docx'):
+                    doc_structure = extract_document_structure(doc_file)
+                    
+                    # Add filename to index
+                    filename = os.path.basename(doc_file)
+                    base_filename = os.path.splitext(filename)[0]
+                    
+                    if filename not in index["filenames"]:
+                        index["filenames"][filename] = []
+                    index["filenames"][filename].append(field)
+                    
+                    if base_filename not in index["filenames"]:
+                        index["filenames"][base_filename] = []
+                    index["filenames"][base_filename].append(field)
+                    
+                    # Add topics
+                    for topic in doc_structure.get("main_topics", []):
+                        if topic not in index["topics"]:
+                            index["topics"][topic] = []
+                        index["topics"][topic].append(field)
+                        index["topics"][topic.lower()] = index["topics"][topic]
+                        field_stats["main_topics"].add(topic)
+                    
+                    # Add processes
+                    for process in doc_structure.get("processes_list", []):
+                        if process not in index["processes"]:
+                            index["processes"][process] = []
+                        index["processes"][process].append(field)
+                        index["processes"][process.lower()] = index["processes"][process]
+                    
+                    # Add search terms
+                    for term in doc_structure.get("search_terms", []):
+                        if term not in index["search_terms"]:
+                            index["search_terms"][term] = []
+                        index["search_terms"][term].append(field)
+                        index["search_terms"][term.lower()] = index["search_terms"][term]
+                    
+                    # Add headings
+                    for heading_info in doc_structure.get("headings_hierarchy", []):
+                        heading_text = heading_info.get("text", "")
+                        if heading_text and heading_text not in index["headings"]:
+                            index["headings"][heading_text] = []
+                        if heading_text:
+                            index["headings"][heading_text].append(field)
+                            index["headings"][heading_text.lower()] = index["headings"][heading_text]
+                    
+                    # Estimate chunk count (rough estimate based on document size)
+                    try:
+                        with open(doc_file, 'rb') as f:
+                            file_size = len(f.read())
+                        estimated_chunks = max(1, file_size // 4000)  # Rough estimate
+                        field_stats["total_chunks"] += estimated_chunks
+                    except:
+                        field_stats["total_chunks"] += 5  # Default estimate
+                        
+            except Exception as e:
+                print(f"Error processing {doc_file} for index: {e}")
+                continue
+        
+        # Convert set to list for JSON serialization
+        field_stats["main_topics"] = list(field_stats["main_topics"])
+        index["field_stats"][field] = field_stats
+    
+    # Save index to file for persistence
+    try:
+        with open(DOCUMENT_STRUCTURE_INDEX_PATH, 'w', encoding='utf-8') as f:
+            json.dump(index, f, ensure_ascii=False, indent=2)
+        print(f"Document structure index saved to {DOCUMENT_STRUCTURE_INDEX_PATH}")
+    except Exception as e:
+        print(f"Error saving document structure index: {e}")
+    
+    document_structure_index = index
+    return index
+
+def load_document_structure_index() -> dict:
+    """
+    Loads the document structure index from file.
+    """
+    global document_structure_index
+    
+    try:
+        if os.path.exists(DOCUMENT_STRUCTURE_INDEX_PATH):
+            with open(DOCUMENT_STRUCTURE_INDEX_PATH, 'r', encoding='utf-8') as f:
+                document_structure_index = json.load(f)
+            print(f"Document structure index loaded from {DOCUMENT_STRUCTURE_INDEX_PATH}")
+            return document_structure_index
+        else:
+            print("No document structure index found. Will be created during next knowledge base update.")
+            return {}
+    except Exception as e:
+        print(f"Error loading document structure index: {e}")
+        return {}
+
+def quick_vector_store_check(user_question: str, selected_fields: list, user_email: str = None) -> dict:
+    """
+    Performs a fast pre-screening to determine if the vector store likely contains relevant information.
+    
+    Returns:
+        dict: {
+            "likely_relevant": bool,
+            "confidence_score": float,
+            "matched_terms": list,
+            "suggested_fields": list,
+            "reason": str
+        }
+    """
+    global document_structure_index
+    
+    # Load index if not already loaded
+    if not document_structure_index:
+        load_document_structure_index()
+    
+    # If no index available, assume relevant (fallback to full search)
+    if not document_structure_index:
+        return {
+            "likely_relevant": True,
+            "confidence_score": 0.5,
+            "matched_terms": [],
+            "suggested_fields": selected_fields,
+            "reason": "No index available - proceeding with full search"
+        }
+    
+    # Apply domain-based access control
+    if user_email:
+        accessible_fields = filter_accessible_fields(user_email, selected_fields)
+    else:
+        accessible_fields = selected_fields
+    
+    # Extract keywords from user question
+    question_words = set(user_question.lower().split())
+    # Remove common German/English stop words
+    stop_words = {'der', 'die', 'das', 'und', 'oder', 'aber', 'ist', 'sind', 'hat', 'haben', 'von', 'zu', 'mit', 'auf', 'in', 'für', 'was', 'wie', 'wo', 'wann', 'warum', 'the', 'and', 'or', 'but', 'is', 'are', 'has', 'have', 'from', 'to', 'with', 'on', 'in', 'for', 'what', 'how', 'where', 'when', 'why'}
+    meaningful_words = question_words - stop_words
+    
+    matched_terms = []
+    field_scores = {}
+    
+    # Check against all index categories
+    index_categories = [
+        ("topics", document_structure_index.get("topics", {})),
+        ("processes", document_structure_index.get("processes", {})),
+        ("search_terms", document_structure_index.get("search_terms", {})),
+        ("headings", document_structure_index.get("headings", {})),
+        ("filenames", document_structure_index.get("filenames", {}))
+    ]
+    
+    for category_name, category_index in index_categories:
+        for term, fields in category_index.items():
+            # Check for exact matches and partial matches
+            term_lower = term.lower()
+            
+            # Exact word match
+            if term_lower in meaningful_words:
+                matched_terms.append(f"{category_name}:{term}")
+                for field in fields:
+                    if field in accessible_fields:
+                        field_scores[field] = field_scores.get(field, 0) + 2.0
+            
+            # Partial match (term contains question word or vice versa)
+            elif any(word in term_lower for word in meaningful_words if len(word) > 2):
+                matched_terms.append(f"{category_name}:{term} (partial)")
+                for field in fields:
+                    if field in accessible_fields:
+                        field_scores[field] = field_scores.get(field, 0) + 1.0
+            
+            # Question word contains term
+            elif any(term_lower in word for word in meaningful_words if len(term_lower) > 2):
+                matched_terms.append(f"{category_name}:{term} (contains)")
+                for field in fields:
+                    if field in accessible_fields:
+                        field_scores[field] = field_scores.get(field, 0) + 1.0
+    
+    # Calculate overall confidence score
+    max_possible_score = len(meaningful_words) * 2.0
+    actual_score = sum(field_scores.values())
+    confidence_score = min(1.0, actual_score / max_possible_score) if max_possible_score > 0 else 0.0
+    
+    # Determine if likely relevant
+    likely_relevant = confidence_score > 0.1 or len(matched_terms) > 0
+    
+    # Sort fields by relevance score
+    suggested_fields = sorted(field_scores.keys(), key=lambda f: field_scores[f], reverse=True)
+    
+    # Add remaining accessible fields
+    for field in accessible_fields:
+        if field not in suggested_fields:
+            suggested_fields.append(field)
+    
+    reason = f"Matched {len(matched_terms)} terms with confidence {confidence_score:.2f}"
+    if not likely_relevant:
+        reason = f"Low relevance: {reason}"
+    
+    return {
+        "likely_relevant": likely_relevant,
+        "confidence_score": confidence_score,
+        "matched_terms": matched_terms[:10],  # Limit to first 10 matches
+        "suggested_fields": suggested_fields,
+        "reason": reason
+    }
+
+def ultra_fast_semantic_prescreen(user_question: str, selected_fields: list, user_email: str = None, max_docs: int = 3) -> dict:
+    """
+    Performs an ultra-fast semantic search with very few documents to check relevance.
+    Only used if keyword matching shows potential.
+    
+    Returns:
+        dict: {
+            "has_relevant_content": bool,
+            "max_similarity": float,
+            "relevant_fields": list,
+            "reason": str
+        }
+    """
+    global vector_stores
+    
+    if not vector_stores:
+        return {
+            "has_relevant_content": True,
+            "max_similarity": 0.5,
+            "relevant_fields": selected_fields,
+            "reason": "No vector stores loaded - skipping semantic prescreen"
+        }
+    
+    # Apply domain-based access control
+    if user_email:
+        accessible_fields = filter_accessible_fields(user_email, selected_fields)
+    else:
+        accessible_fields = selected_fields
+    
+    relevant_fields = []
+    max_similarity = 0.0
+    
+    for field in accessible_fields:
+        if field in vector_stores:
+            try:
+                # Ultra-fast search with very few documents
+                retriever = vector_stores[field].as_retriever(search_kwargs={"k": max_docs})
+                docs = retriever.invoke(user_question)
+                
+                if docs:
+                    # Simple heuristic: if we got documents, there's likely relevant content
+                    # In a full implementation, you could calculate actual similarity scores
+                    field_relevance = len(docs) / max_docs
+                    if field_relevance > 0.3:  # Arbitrary threshold
+                        relevant_fields.append(field)
+                        max_similarity = max(max_similarity, field_relevance)
+                        
+            except Exception as e:
+                print(f"Error in ultra-fast semantic prescreen for {field}: {e}")
+                continue
+    
+    has_relevant_content = len(relevant_fields) > 0 or max_similarity > 0.2
+    
+    reason = f"Semantic prescreen found {len(relevant_fields)} relevant fields with max similarity {max_similarity:.2f}"
+    
+    return {
+        "has_relevant_content": has_relevant_content,
+        "max_similarity": max_similarity,
+        "relevant_fields": relevant_fields,
+        "reason": reason
+    }
 
 def load_vector_store():
     """
@@ -770,7 +1068,17 @@ def force_create_vector_store():
     yield "--- Knowledge base creation complete. Loading into memory... ---"
     # Reload all vector stores into memory
     load_vector_store()
-    yield "🎉 Clean semantic search system ready! German technical terms should now work perfectly."
+    
+    # Create document structure index for fast pre-screening
+    yield "--- Creating document structure index for fast pre-screening... ---"
+    try:
+        create_document_structure_index(knowledge_fields)
+        yield "✅ Document structure index created successfully"
+    except Exception as e:
+        yield f"Warning: Could not create document structure index: {e}"
+        print(f"Error creating document structure index: {e}")
+    
+    yield "🎉 Enhanced semantic search system with fast pre-screening ready!"
 
 def analyze_pdf_complexity(file_path: str) -> dict:
     """
@@ -2256,6 +2564,64 @@ Be specific and reference the previous information directly."""
             return
 
         if determined_source_mode == "vector_store" or determined_source_mode == "vector_store_forced":
+            # NEW: Fast pre-screening system to avoid unnecessary RAG processing
+            if determined_source_mode == "vector_store":  # Skip pre-screening if forced
+                yield {"type": "status", "data": "Running fast pre-screening to check relevance..."}
+                
+                # Step 1: Quick keyword-based pre-screening
+                prescreening_result = await asyncio.to_thread(
+                    quick_vector_store_check, 
+                    conversation_history[-1]['content'], 
+                    selected_fields, 
+                    user_email
+                )
+                
+                yield {"type": "status", "data": prescreening_result["reason"]}
+                
+                # If pre-screening suggests low relevance, do ultra-fast semantic check
+                if prescreening_result["likely_relevant"] and prescreening_result["confidence_score"] < 0.7:
+                    yield {"type": "status", "data": "Running ultra-fast semantic validation..."}
+                    
+                    semantic_result = await asyncio.to_thread(
+                        ultra_fast_semantic_prescreen,
+                        conversation_history[-1]['content'],
+                        prescreening_result["suggested_fields"],
+                        user_email,
+                        max_docs=3
+                    )
+                    
+                    yield {"type": "status", "data": semantic_result["reason"]}
+                    
+                    # If both pre-screening and semantic check suggest low relevance, offer fallback
+                    if not semantic_result["has_relevant_content"]:
+                        features = load_features()
+                        web_search_available = features.get("web_search", True) and 'Web' in selected_fields
+                        
+                        if web_search_available:
+                            yield {
+                                "type": "clarification",
+                                "data": {
+                                    "question": f"Pre-screening suggests limited relevant content in the knowledge base (confidence: {prescreening_result['confidence_score']:.2f}). Would you like me to:",
+                                    "options": [
+                                        "Search the web instead",
+                                        "Proceed with knowledge base search anyway",
+                                        "Let me rephrase my question"
+                                    ],
+                                    "clarification_type": "pre_screening_fallback"
+                                }
+                            }
+                            return
+                        else:
+                            yield {"type": "status", "data": "Web search not available - proceeding with knowledge base search..."}
+                    else:
+                        # Use the suggested fields from semantic pre-screening
+                        selected_fields = semantic_result["relevant_fields"] or selected_fields
+                        yield {"type": "status", "data": f"Pre-screening passed - focusing on relevant fields: {', '.join(selected_fields)}"}
+                else:
+                    yield {"type": "status", "data": f"Pre-screening confidence high ({prescreening_result['confidence_score']:.2f}) - proceeding with full search"}
+            else:
+                yield {"type": "status", "data": "Skipping pre-screening (forced mode) - proceeding with full search"}
+            
             yield {"type": "status", "data": "Searching internal knowledge base with pure semantic search..."}
             
             # Clean approach: Pure semantic search with excellent multilingual embeddings
@@ -3134,6 +3500,7 @@ async def generate_image(conversation_history: list, last_image_bytes: bytes = N
     *   **For Modifications:** This is crucial. Re-describe the *entire scene* from the previous turn, and then integrate the user's latest message as a specific change. You can even emphasize the change, for example: "A photorealistic image of a classic red sports car on a coastal highway at sunset, with the crucial update that the car should now be blue."
 4.  **Language:** The output prompt should be in a clear, descriptive language suitable for an image generation model (typically English).
 5.  **Output:** Return ONLY the final prompt string and nothing else.
+6.  **When you are Refining existing image, change only the parts that the user has specified. Do not change anything else in the picture.**
 
 **Example Workflow (Modification):**
 -   **Previous Prompt was:** "A photorealistic image of a classic red sports car on a coastal highway at sunset." (This resulted in an image).

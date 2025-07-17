@@ -1175,8 +1175,18 @@ async def log_chat_question(sid, question_text):
             return None
         
         user_id = sessions[sid].get("user_id")
+        access_token = sessions[sid].get("access_token")
+        
         if not user_id:
-            return None
+            # Try to get user from token if user_id is missing
+            if access_token:
+                user = await get_user_from_session(sid)
+                if user:
+                    sessions[sid]["user_id"] = user.id
+                    user_id = user.id
+            
+            if not user_id:
+                return None
         
         # Create chat question log entry
         db = next(get_db())
@@ -1201,7 +1211,7 @@ async def log_chat_question(sid, question_text):
         finally:
             db.close()
     except Exception as e:
-        print(f"Error logging chat question: {e}")
+        print(f"Error logging chat question for session {sid}: {e}")
         return None
 
 # --- Socket.IO Event Handlers ---
@@ -1295,12 +1305,19 @@ async def new_dialog(sid):
     """Clears the conversation history and all session data for a new dialog."""
     if sid in sessions:
         cleanup_session_file(sid) # Clean up all temp files/dirs on new dialog
+        
+        # Preserve user authentication data
+        access_token = sessions[sid].get("access_token")
+        user_id = sessions[sid].get("user_id")
+        
         sessions[sid] = {
             "messages": [],
             "source_mode": None,
             "uploaded_file_path": None,
             "rag_vector_store_path": None,
             "uploaded_rag_file_path": None,
+            "access_token": access_token,  # Preserve for continued question logging
+            "user_id": user_id,  # Preserve for continued question logging
         }
         print(f"New dialog started for session: {sid}")
         await sio.emit("status", {"message": "New dialog started."}, to=sid)
