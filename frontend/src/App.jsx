@@ -1280,7 +1280,7 @@ function MainContent() {
                     </div>
                 )}
                 <div className="sidebar-actions">
-                    <button onClick={handleNewDialog}>
+                    <button onClick={handleNewDialog} title="New Dialog">
                         <img src={newDialogIcon} alt="New Dialog" className="sidebar-action-icon" />
                         {isSidebarExpanded && <span className="sidebar-action-text">New Dialog</span>}
                     </button>
@@ -1586,7 +1586,7 @@ function MainContent() {
                                     ? 'Ask about the image...'
                                     : uploadedFileContent
                                     ? 'Ask about the document...'
-                                    : 'Ask your question... (Shift + Enter for new line)'
+                                    : 'Ask your question...'
                             }
                             disabled={isChatDisabled}
                             rows="1"
