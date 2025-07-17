@@ -62,7 +62,18 @@ const getBaseUrl = () => {
     }
 };
 
-const SOCKET_URL = getBaseUrl();
+// Socket.IO should always connect to /socket.io/ within the container
+// BASE_PATH is only for frontend routing, not for Socket.IO endpoints
+const getSocketUrl = () => {
+    if (isDevelopment) {
+        return "https://localhost:8443";
+    } else {
+        // In production, Socket.IO runs inside container at /socket.io/
+        return `${window.location.protocol}//${window.location.host}`;
+    }
+};
+
+const SOCKET_URL = getSocketUrl();
 const API_URL = getBaseUrl();
 
 function MainContent() {

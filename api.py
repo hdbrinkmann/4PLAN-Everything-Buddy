@@ -108,13 +108,9 @@ sio = socketio.AsyncServer(
     ping_interval=60   # Increased interval to 60 seconds
 )
 
-# Configure Socket.IO path based on BASE_PATH
-socket_path = '/socket.io/'
-if BASE_PATH:
-    socket_path = f'{BASE_PATH}/socket.io/'
-
-# The final ASGI app that combines FastAPI and Socket.IO
-app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path=socket_path)
+# Socket.IO should always run on /socket.io/ within the container
+# BASE_PATH is only for frontend routing, not for Socket.IO endpoints
+app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
 logic = AppLogic()
 
