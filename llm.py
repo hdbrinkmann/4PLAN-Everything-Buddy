@@ -2019,6 +2019,23 @@ def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int 
         "stats": {"doc_count": len(docs), "avg_score": avg_score, "max_score": max_score}
     }
 
+def detect_explicit_web_search_request(user_question: str) -> bool:
+    """
+    Erkennt explizite Web-Suche-Anfragen durch Schlüsselwörter.
+    Returns True if the user explicitly requests a web search.
+    """
+    web_search_keywords = [
+        "suche im web", "web search", "google", "online suchen",
+        "finde im internet", "search online", "look up online", 
+        "websuche", "internet-suche", "online search",
+        "durchsuche das internet", "search the web", "im internet suchen",
+        "web durchsuchen", "online nachschlagen", "internetsuche",
+        "suche online", "online recherche", "web recherche"
+    ]
+    
+    user_question_lower = user_question.lower()
+    return any(keyword in user_question_lower for keyword in web_search_keywords)
+
 def route_query(client, conversation_history: list, cancellation_check=lambda: False) -> str:
     """
     Classifies the user's query to determine the best information source using a powerful LLM.
@@ -2426,51 +2443,65 @@ async def get_answer(conversation_history: list, source_mode: str = None, select
             determined_source_mode = "image_generation"
         elif 'determined_source_mode' not in locals():
             # Only do routing if we haven't already determined the source mode from quality fallback
-            # STEP 1: Check if we can answer from conversation context (Hybrid Approach)
-            yield {"type": "status", "data": "Analyzing conversation context..."}
-            if cancellation_check(): return
             
-            can_use_context = await asyncio.to_thread(can_answer_from_conversation_context, client, conversation_history)
-            
-            if can_use_context:
-                yield {"type": "status", "data": "Question can be answered from conversation context"}
-                determined_source_mode = "context_answer"
+            # STEP 1: Check for explicit web search request (HIGHEST PRIORITY)
+            yield {"type": "status", "data": "Checking for explicit web search request..."}
+            if detect_explicit_web_search_request(last_question):
+                yield {"type": "status", "data": "Explicit web search request detected"}
+                # Check if web search is enabled
+                features = load_features()
+                if features.get("web_search", True) and 'Web' in selected_fields:
+                    determined_source_mode = 'web_search'
+                    yield {"type": "status", "data": "Web search enabled - proceeding with web search"}
+                else:
+                    yield {"type": "status", "data": "Web search disabled or not selected - falling back to direct answer"}
+                    determined_source_mode = 'direct_answer'
             else:
-                # STEP 2: Normal routing logic for questions that need external sources
-                yield {"type": "status", "data": "Routing query for external sources..."}
+                # STEP 2: Check if we can answer from conversation context (Hybrid Approach)
+                yield {"type": "status", "data": "Analyzing conversation context..."}
                 if cancellation_check(): return
                 
-                routed_mode = await asyncio.to_thread(route_query, client, conversation_history, cancellation_check)
-
-                # --- Routing logic with context enhancement ---
-                determined_source_mode = "direct_answer" # Default to direct answer
-
-                # 1. Always prioritize image generation
-                if routed_mode == 'image_generation':
-                    determined_source_mode = 'image_generation'
-                # 2. Check for web search
-                elif routed_mode == 'web_search':
-                    # Check if web search is enabled by the user
-                    features = load_features()
-                    if features.get("web_search", True) and 'Web' in selected_fields:
-                        determined_source_mode = 'web_search'
-                    else:
-                        # Web search is disabled, so fall back to direct answer
-                        determined_source_mode = 'direct_answer'
-                # 3. Check for vector store
-                elif routed_mode == 'vector_store':
-                    # Check if any actual vector store fields are selected
-                    has_vector_fields = any(field for field in selected_fields if field != 'Web')
-                    if has_vector_fields:
-                        determined_source_mode = 'vector_store'
-                    else:
-                        # No vector stores selected, so fall back to direct answer
-                        determined_source_mode = 'direct_answer'
-                # 4. If the router suggested a direct answer, respect it.
-                elif routed_mode == 'direct_answer':
-                    determined_source_mode = 'direct_answer'
+                can_use_context = await asyncio.to_thread(can_answer_from_conversation_context, client, conversation_history)
                 
-                yield {"type": "status", "data": f"Query routed to: {determined_source_mode.replace('_', ' ')}"}
+                if can_use_context:
+                    yield {"type": "status", "data": "Question can be answered from conversation context"}
+                    determined_source_mode = "context_answer"
+                else:
+                    # STEP 3: Normal routing logic for questions that need external sources
+                    yield {"type": "status", "data": "Routing query for external sources..."}
+                    if cancellation_check(): return
+                    
+                    routed_mode = await asyncio.to_thread(route_query, client, conversation_history, cancellation_check)
+
+                    # --- Routing logic with context enhancement ---
+                    determined_source_mode = "direct_answer" # Default to direct answer
+
+                    # 1. Always prioritize image generation
+                    if routed_mode == 'image_generation':
+                        determined_source_mode = 'image_generation'
+                    # 2. Check for web search
+                    elif routed_mode == 'web_search':
+                        # Check if web search is enabled by the user
+                        features = load_features()
+                        if features.get("web_search", True) and 'Web' in selected_fields:
+                            determined_source_mode = 'web_search'
+                        else:
+                            # Web search is disabled, so fall back to direct answer
+                            determined_source_mode = 'direct_answer'
+                    # 3. Check for vector store
+                    elif routed_mode == 'vector_store':
+                        # Check if any actual vector store fields are selected
+                        has_vector_fields = any(field for field in selected_fields if field != 'Web')
+                        if has_vector_fields:
+                            determined_source_mode = 'vector_store'
+                        else:
+                            # No vector stores selected, so fall back to direct answer
+                            determined_source_mode = 'direct_answer'
+                    # 4. If the router suggested a direct answer, respect it.
+                    elif routed_mode == 'direct_answer':
+                        determined_source_mode = 'direct_answer'
+                    
+                    yield {"type": "status", "data": f"Query routed to: {determined_source_mode.replace('_', ' ')}"}
 
         # --- Answer Generation based on determined mode ---
         if determined_source_mode == "image_generation":
