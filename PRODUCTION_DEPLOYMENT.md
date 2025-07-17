@@ -39,7 +39,9 @@ mkdir -p Documents/"S4U & 4PLAN"
 
 # Persistente Daten
 mkdir -p vector_store
-touch favorites.db
+mkdir -p data  # Neues Verzeichnis für Datenbankdateien
+
+# Konfigurationsdateien
 echo '[]' > admins.json
 echo '{"image_generation":true,"pdf_docx_upload":true,"txt_sql_upload":true,"xlsx_csv_analysis":true,"web_search":true}' > features.json
 echo '["S4U & 4PLAN"]' > knowledge_fields.json
