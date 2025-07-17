@@ -76,12 +76,18 @@ sudo chown $USER:$USER ssl/*.pem
 ### 5. Production Container starten
 
 ```bash
-# Production-Version mit Registry-Image starten
-docker-compose -f docker-compose.prod.yml up -d
+# Repository klonen (für lokales Building)
+git clone https://github.com/hdbrinkmann/4PLAN-Everything-Buddy.git
+cd 4PLAN-Everything-Buddy
+
+# Production-Container mit lokalem Build starten
+docker-compose -f docker-compose.prod.yml up -d --build
 
 # Logs überwachen
 docker-compose -f docker-compose.prod.yml logs -f app
 ```
+
+> **Hinweis**: Die Production-Version ist für lokales Building konfiguriert, um Probleme mit externen Docker-Registries zu vermeiden.
 
 ## 🔍 Testen der Konfiguration
 

@@ -1,6 +1,11 @@
 services:
   app:
-    image: ghcr.io/hdbrinkmann/4plan-everything-buddy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_TENANT_ID: ${VITE_TENANT_ID}
+        VITE_CLIENT_ID: ${VITE_CLIENT_ID}
     ports:
       - "8443:443"
     # Resource limits to improve vector database performance
