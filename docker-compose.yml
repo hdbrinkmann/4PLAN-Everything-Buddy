@@ -7,7 +7,7 @@ services:
         VITE_TENANT_ID: ${VITE_TENANT_ID}
         VITE_CLIENT_ID: ${VITE_CLIENT_ID}
     ports:
-      - "8443:443"
+      - "443:443"
     # Resource limits to improve vector database performance
     mem_limit: 4g
     memswap_limit: 16g
@@ -28,13 +28,12 @@ services:
     environment:
       - PYTHONPATH=/app
       - FRONTEND_PATH=/app/frontend/dist
-      - BASE_PATH=/4PLANBuddy
       # Tell the app where to find persistent data
       - DB_PATH=/app/db_volume/favorites.db
       - CONFIG_PATH=/app/config_volume
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/4PLANBuddy/"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
       interval: 30s
       timeout: 10s
       retries: 3

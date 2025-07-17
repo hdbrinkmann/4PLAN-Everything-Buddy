@@ -12,7 +12,7 @@
 
 ### Nginx-Konfiguration
 
-Fügen Sie folgende Konfiguration zu Ihrem Nginx-Reverse-Proxy für **4PLAN.de** hinzu:
+Fügen Sie folgende Konfiguration zu Ihrem Nginx-Reverse-Proxy für **keycloak.4plan.de** hinzu:
 
 ```nginx
 # In Ihrer server{} Sektion
@@ -88,7 +88,7 @@ services:
   app:
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.4planbuddy.rule=Host(`4PLAN.de`) && PathPrefix(`/4PLANBuddy`)"
+      - "traefik.http.routers.4planbuddy.rule=Host(`keycloak.4plan.de`) && PathPrefix(`/4PLANBuddy`)"
       - "traefik.http.routers.4planbuddy.entrypoints=websecure"
       - "traefik.http.routers.4planbuddy.tls=true"
       - "traefik.http.services.4planbuddy.loadbalancer.server.port=443"
@@ -123,11 +123,11 @@ curl -k https://localhost:8443/4PLANBuddy/
 
 ### 2. Reverse-Proxy-Test
 ```bash
-curl https://4PLAN.de/4PLANBuddy/
+curl https://keycloak.4plan.de/4PLANBuddy/
 ```
 
 ### 3. Browser-Test
-- Öffnen Sie: `https://4PLAN.de/4PLANBuddy/`
+- Öffnen Sie: `https://keycloak.4plan.de/4PLANBuddy/`
 - Die App sollte normal laden und funktionieren
 
 ## Troubleshooting
@@ -172,9 +172,9 @@ docker-compose logs --since=10m app
 ## Erfolgsmeldung
 
 Wenn alles korrekt konfiguriert ist, sollten Sie:
-- ✅ Die App unter `https://4PLAN.de/4PLANBuddy/` erreichen können
+- ✅ Die App unter `https://keycloak.4plan.de/4PLANBuddy/` erreichen können
 - ✅ Normale Funktionalität haben (Chat, File-Upload, etc.)
 - ✅ WebSocket-Verbindungen funktionieren
 - ✅ Alle API-Calls korrekt verarbeitet werden
 
-🎉 **Gratulation! Ihre App läuft jetzt unter https://4PLAN.de/4PLANBuddy**
+🎉 **Gratulation! Ihre App läuft jetzt unter https://keycloak.4plan.de/4PLANBuddy**

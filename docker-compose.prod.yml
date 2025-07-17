@@ -2,14 +2,14 @@ services:
   app:
     image: ghcr.io/hdbrinkmann/4plan-everything-buddy:latest
     ports:
-      - "443:443"
+      - "8443:443"
     # Resource limits to improve vector database performance
     mem_limit: 4g
     memswap_limit: 16g
     cpus: '4.0'
     volumes:
-      # Mount SSL certificates
-      - ./ssl:/app/ssl
+      # Mount existing SSL certificates from host
+      - ./ssl:/app/ssl:ro
       # Mount .env file if it exists
       - ./.env:/app/.env:ro
       # FIXED: Mount Documents and vector_store for production persistence
@@ -24,9 +24,10 @@ services:
     environment:
       - PYTHONPATH=/app
       - FRONTEND_PATH=/app/frontend/dist
+      - BASE_PATH=/4PLANBuddy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/4PLANBuddy/"]
       interval: 30s
       timeout: 10s
       retries: 3

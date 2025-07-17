@@ -45,9 +45,9 @@ origins = [
     "*",  # Allow all origins for sub-path deployment
 ]
 
-# Get base path from environment variable
+# Get base path from environment variable (only for production)
 BASE_PATH = os.environ.get("BASE_PATH", "")
-fastapi_app = FastAPI(root_path=BASE_PATH)
+fastapi_app = FastAPI(root_path=BASE_PATH) if BASE_PATH else FastAPI()
 
 # Add CORS middleware to the FastAPI app
 fastapi_app.add_middleware(

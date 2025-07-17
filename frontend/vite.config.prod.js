@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
+// Production configuration with sub-path support for keycloak.4plan.de/4PLANBuddy
+export default defineConfig({
   envPrefix: 'VITE_',
+  base: '/4PLANBuddy/',
   plugins: [react()],
   server: {
     host: 'localhost',
@@ -27,7 +28,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   define: {
-    // Define environment variables for production
-    __DEV__: mode === 'development',
+    __DEV__: false,
   },
-}))
+})
