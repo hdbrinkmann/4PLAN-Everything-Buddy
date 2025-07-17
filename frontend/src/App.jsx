@@ -54,8 +54,8 @@ const getBaseUrl = () => {
         // Development: Use HTTPS backend on port 8443
         return "https://localhost:8443";
     } else {
-        // Production/Docker: use current protocol and host
-        return `${window.location.protocol}//${window.location.host}`;
+        // Production/Docker: use current protocol and host with sub-path
+        return `${window.location.protocol}//${window.location.host}${import.meta.env.BASE_URL || ''}`.replace(/\/$/, '');
     }
 };
 
