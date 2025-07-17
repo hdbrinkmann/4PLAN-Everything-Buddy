@@ -10,7 +10,7 @@
   --accent-color: #8A1A11;
   --accent-gradient: linear-gradient(135deg, #8A1A11 0%, #a82b1f 100%);
   --user-message-bg: linear-gradient(135deg, #8A1A11 0%, #a82b1f 100%);
-  --assistant-message-bg: linear-gradient(135deg, #e4e6eb 0%, #f0f2f5 100%);
+  --assistant-message-bg: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   --border-color: #ced0d4;
   --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -311,6 +311,7 @@ body, html {
   height: 100vh;
   min-width: 0; /* Fix for initial width calculation */
   position: relative; /* Needed for absolute positioning of the export button */
+  background: linear-gradient(135deg, #fafbfc 0%, #f0f2f5 100%);
 }
 
 .chat-history {
@@ -319,7 +320,12 @@ body, html {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  background-image: 
+    radial-gradient(circle at 20px 20px, rgba(255, 255, 255, 0.3) 1px, transparent 1px),
+    radial-gradient(circle at 60px 60px, rgba(255, 255, 255, 0.2) 1px, transparent 1px);
+  background-size: 80px 80px, 120px 120px;
+  background-position: 0 0, 40px 40px;
 }
 
 .chat-message {
