@@ -97,6 +97,29 @@ services:
       - "traefik.http.routers.4planbuddy.middlewares=4planbuddy-stripprefix"
 ```
 
+### Microsoft Web Application Proxy (WAP)
+
+Falls Sie Microsoft WAP verwenden, siehe die detaillierte Anleitung in `MICROSOFT_WAP_SETUP.md`.
+
+**Kurze PowerShell-Konfiguration:**
+
+```powershell
+# WAP-Anwendung erstellen
+Add-WebApplicationProxyApplication -Name "4PLAN Buddy" `
+    -ExternalUrl "https://keycloak.4plan.de/4planbuddy/" `
+    -BackendServerUrl "https://CONTAINER_HOST_IP:8443/" `
+    -ExternalPreAuthentication PassThrough `
+    -BackendServerAuthenticationSPN "HTTP/CONTAINER_HOST_IP" `
+    -EnableHTTPRedirect:$true `
+    -BackendServerCertificateValidation None
+```
+
+**Wichtige WAP-Besonderheiten:**
+- ⚠️ Sub-Path-Handling komplexer als bei anderen Proxies
+- ⚠️ WebSocket-Support benötigt spezielle Konfiguration
+- ✅ ADFS-Integration verfügbar
+- ✅ Enterprise-Sicherheitsfeatures
+
 ## Container starten
 
 1. **Container builden und starten:**
