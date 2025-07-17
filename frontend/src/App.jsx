@@ -55,7 +55,16 @@ const getBaseUrl = () => {
         return "https://localhost:8443";
     } else {
         // Production/Docker: use current protocol and host with sub-path
-        return `${window.location.protocol}//${window.location.host}${import.meta.env.BASE_URL || ''}`.replace(/\/$/, '');
+        // Check if we're running under a sub-path by looking at the current URL
+        const currentPath = window.location.pathname;
+        let basePath = '';
+        
+        // If the current path starts with /4PLANBuddy, we're in sub-path mode
+        if (currentPath.startsWith('/4PLANBuddy')) {
+            basePath = '/4PLANBuddy';
+        }
+        
+        return `${window.location.protocol}//${window.location.host}${basePath}`;
     }
 };
 
