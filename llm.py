@@ -2381,11 +2381,25 @@ Be specific and reference the previous information directly."""
                 yield {"type": "status", "data": "Formulating answer from internal documents..."}
             else:
                 yield {"type": "status", "data": "Formulating answer from available internal documents (limited quality)..."}
-            system_prompt = """You are a helpful assistant. Your task is to answer the user's question based *only* on the provided 'Internal Context'.
+            
+            # Detect the language of the user's question for stronger language enforcement
+            user_question_lang = "German" if any(german_word in last_question.lower() for german_word in ['der', 'die', 'das', 'und', 'oder', 'aber', 'ist', 'sind', 'wie', 'was', 'wo', 'wann', 'warum', 'können', 'kann', 'soll', 'sollte', 'würde', 'haben', 'hatte', 'wird', 'wurde', 'muss', 'müssen', 'darf', 'dürfen']) else "English"
+            
+            system_prompt = f"""You are a helpful assistant. Your task is to answer the user's question based *only* on the provided 'Internal Context'.
+
+**CRITICAL LANGUAGE REQUIREMENT:**
+- The user asked their question in {user_question_lang}
+- You MUST respond in {user_question_lang} regardless of what language the internal documents are in
+- If the internal documents are in English but the user asked in German, you must translate the information and respond in German
+- If the internal documents are in German but the user asked in English, you must translate the information and respond in English
+- This is MANDATORY - language mismatch is not acceptable
+
+**Instructions:**
 - Read the user's question in the context of the full conversation.
 - Analyze the 'Internal Context' thoroughly and provide a comprehensive answer.
 - Do not use any outside knowledge.
 - You MUST create a nicely markdown formatted answer with bullet points.
+- **REMEMBER: You MUST respond in {user_question_lang}, not in the language of the internal documents!**
 """
             messages = create_contextual_messages(conversation_history, system_prompt)
             messages.append({"role": "system", "content": f"Internal Context:\n\n{context}"})
@@ -2534,12 +2548,22 @@ Be specific and reference the previous information directly."""
                 [f"Source [{i+1}]({res['url']}):\n{res['content']}" for i, res in enumerate(scraped_results)]
             )
 
+            # Detect the language of the user's question for stronger language enforcement
+            user_question_lang = "German" if any(german_word in last_question.lower() for german_word in ['der', 'die', 'das', 'und', 'oder', 'aber', 'ist', 'sind', 'wie', 'was', 'wo', 'wann', 'warum', 'können', 'kann', 'soll', 'sollte', 'würde', 'haben', 'hatte', 'wird', 'wurde', 'muss', 'müssen', 'darf', 'dürfen']) else "English"
+            
             system_prompt = f"""You are a web analysis expert. Your task is to answer the user's question based *only* on the provided 'Web Search Context'.
+
+**CRITICAL LANGUAGE REQUIREMENT:**
+- The user asked their question in {user_question_lang}
+- You MUST respond in {user_question_lang} regardless of what language the web content is in
+- If the web content is in English but the user asked in German, you must translate the information and respond in German
+- If the web content is in German but the user asked in English, you must translate the information and respond in English
+- This is MANDATORY - language mismatch is not acceptable
 
 **Instructions:**
 1.  Read the user's question: '{last_question}'.
 2.  Analyze the 'Web Search Context'. Each source is now formatted as `Source [number](URL): content`.
-3.  Formulate a comprehensive answer in the same language as the user's question.
+3.  Formulate a comprehensive answer in {user_question_lang} (the same language as the user's question).
 4.  **Cite sources by using the exact markdown hyperlink provided in the context.** For example, when you use information from `Source [1](https://example.com/source1)`, you must cite it as `[1](https://example.com/source1)`.
 5.  **Placement Rule:** Place citation links within the descriptive text (e.g., at the end of a sentence).
 6.  Structure your answer using markdown, including bullet points for clarity.
@@ -2548,6 +2572,8 @@ Be specific and reference the previous information directly."""
 
 **Correct Citation Example:**
 "This is a descriptive sentence that uses information from a source [1](https://example.com/source1)."
+
+**REMEMBER: You MUST respond in {user_question_lang}, not in the language of the web content!**
 """
             # Truncate context to fit within model limits
             messages_for_size_check = create_contextual_messages(conversation_history, system_prompt)
