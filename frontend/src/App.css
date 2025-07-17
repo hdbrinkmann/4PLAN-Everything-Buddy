@@ -260,7 +260,7 @@ body, html {
 
 .sidebar-user {
   position: absolute;
-  bottom: 20px;
+  bottom: 10px;
   left: 20px;
   right: 20px;
 }
@@ -278,10 +278,12 @@ body, html {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 18px;
     cursor: pointer;
     font-size: 1rem; /* Match other buttons */
     transition: background-color 0.2s;
+    height: 48px;
+    box-sizing: border-box;
 }
 
 .user-info:hover {
