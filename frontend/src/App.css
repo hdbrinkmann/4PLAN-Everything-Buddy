@@ -485,13 +485,13 @@ body, html {
   right: 20px;
   display: flex;
   flex-direction: row;
-  gap: 10px;
+  gap: 12px;
   z-index: 100;
 }
 
 .chat-action-buttons button {
-  background-color: var(--tertiary-bg);
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: none;
   border-radius: 50%;
   width: 48px;
   height: 48px;
@@ -499,31 +499,36 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  transition: background-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow-medium);
+  transition: all 0.3s ease;
   padding: 0;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .chat-action-buttons button:hover {
-  background-color: #e4e6eb;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-heavy);
 }
 
 .chat-action-buttons button img {
   width: 24px;
   height: 24px;
+  filter: brightness(0) saturate(100%) invert(25%) sepia(0%) saturate(0%) hue-rotate(0deg);
 }
 
 .chat-action-buttons button:disabled {
-  background-color: #f0f2f5;
+  background: linear-gradient(135deg, #f0f2f5 0%, #e9ecef 100%);
   cursor: not-allowed;
   opacity: 0.5;
-  box-shadow: none;
+  box-shadow: var(--shadow-light);
+  transform: none;
 }
 
 .favorites-panel-btn,
 .history-panel-btn {
-  background: #2196F3;
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
   border: none;
   border-radius: 50%;
   width: 50px;
@@ -532,21 +537,24 @@ body, html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-medium);
   transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .favorites-panel-btn:hover,
 .history-panel-btn:hover {
-  background: #1976D2;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-heavy);
 }
 
 .favorites-panel-btn img,
 .history-panel-btn img {
   width: 24px;
   height: 24px;
+  filter: brightness(0) saturate(100%) invert(100%);
 }
 
 
