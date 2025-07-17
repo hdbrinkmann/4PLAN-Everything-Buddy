@@ -6,6 +6,7 @@ services:
       args:
         VITE_TENANT_ID: ${VITE_TENANT_ID}
         VITE_CLIENT_ID: ${VITE_CLIENT_ID}
+        BUILD_MODE: production
     ports:
       - "8443:443"
     # Resource limits to improve vector database performance

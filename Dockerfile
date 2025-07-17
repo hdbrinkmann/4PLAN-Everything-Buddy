@@ -22,8 +22,13 @@ RUN npm cache clean --force && npm install --legacy-peer-deps
 # Copy frontend source
 COPY frontend/ ./
 
-# Build the frontend for production with sub-path configuration
-RUN npm run build -- --config vite.config.prod.js
+# Build the frontend - use prod config only if BUILD_MODE is production
+ARG BUILD_MODE=development
+RUN if [ "$BUILD_MODE" = "production" ]; then \
+      npm run build -- --config vite.config.prod.js; \
+    else \
+      npm run build; \
+    fi
 
 # Stage 2: Python backend with frontend integration
 FROM python:3.11-slim
