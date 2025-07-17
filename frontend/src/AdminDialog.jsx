@@ -685,68 +685,65 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
 
                     {activeTab === 'knowledge' && (
                         <div className="knowledge-tab">
-                            <h4>Knowledge Base Management</h4>
-                            <p className="tab-description">
-                                Manage knowledge fields and their domain access permissions. Then update the internal knowledge base from document folders.
-                            </p>
-                            
                             <div className="knowledge-domain-management">
-                                <h5>Domain Access Management</h5>
+                                <h4>Domain Access Management</h4>
                                 <p className="domain-description">
                                     Control which email domains can access each knowledge field. Users can only access knowledge fields from their email domain.
                                 </p>
                                 
-                                {loadingKnowledgeFields ? (
-                                    <div className="loading">Loading knowledge fields...</div>
-                                ) : (
-                                    <div className="knowledge-fields-list">
-                                        {knowledgeFields.map((field, fieldIndex) => (
-                                            <div key={fieldIndex} className="knowledge-field-item">
-                                                <div className="field-header">
-                                                    <h6>{field.field_name}</h6>
+                                <div className="knowledge-fields-scrollable">
+                                    {loadingKnowledgeFields ? (
+                                        <div className="loading">Loading knowledge fields...</div>
+                                    ) : (
+                                        <div className="knowledge-fields-list">
+                                            {knowledgeFields.map((field, fieldIndex) => (
+                                                <div key={fieldIndex} className="knowledge-field-item">
+                                                    <div className="field-header">
+                                                        <h6>{field.field_name}</h6>
+                                                    </div>
+                                                    <div className="field-domains">
+                                                        <label>Allowed Domains:</label>
+                                                        {field.domains.map((domain, domainIndex) => (
+                                                            <div key={domainIndex} className="domain-input-group">
+                                                                <input
+                                                                    type="text"
+                                                                    value={domain}
+                                                                    onChange={(e) => handleDomainChange(fieldIndex, domainIndex, e.target.value)}
+                                                                    placeholder="example.com"
+                                                                    className="domain-input"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeDomainFromField(fieldIndex, domainIndex)}
+                                                                    className="remove-domain-btn"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => addDomainToField(fieldIndex)}
+                                                            className="add-domain-btn"
+                                                        >
+                                                            + Add Domain
+                                                        </button>
+                                                        {field.domains.length === 0 && (
+                                                            <p className="no-domains-warning">
+                                                                No domains configured - only admins can access this field
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="field-domains">
-                                                    <label>Allowed Domains:</label>
-                                                    {field.domains.map((domain, domainIndex) => (
-                                                        <div key={domainIndex} className="domain-input-group">
-                                                            <input
-                                                                type="text"
-                                                                value={domain}
-                                                                onChange={(e) => handleDomainChange(fieldIndex, domainIndex, e.target.value)}
-                                                                placeholder="example.com"
-                                                                className="domain-input"
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeDomainFromField(fieldIndex, domainIndex)}
-                                                                className="remove-domain-btn"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => addDomainToField(fieldIndex)}
-                                                        className="add-domain-btn"
-                                                    >
-                                                        + Add Domain
-                                                    </button>
-                                                    {field.domains.length === 0 && (
-                                                        <p className="no-domains-warning">
-                                                            No domains configured - only admins can access this field
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {knowledgeFields.length === 0 && (
-                                            <p className="no-fields-message">No knowledge fields found. Update the knowledge base first.</p>
-                                        )}
-                                    </div>
-                                )}
+                                            ))}
+                                            {knowledgeFields.length === 0 && (
+                                                <p className="no-fields-message">No knowledge fields found. Update the knowledge base first.</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                                 
-                                <div className="domain-actions">
+                                <div className="domain-actions-sticky">
                                     <button
                                         onClick={saveKnowledgeFieldDomains}
                                         disabled={savingKnowledgeFields || loadingKnowledgeFields}
@@ -756,7 +753,6 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                                     </button>
                                 </div>
                             </div>
-                            
                         </div>
                     )}
 

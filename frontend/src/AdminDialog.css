@@ -412,6 +412,9 @@
 
 /* Knowledge field domain management styles */
 .knowledge-domain-management {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     margin-bottom: 30px;
     padding: 20px;
     border: 1px solid #e0e0e0;
@@ -419,10 +422,10 @@
     background-color: #f9f9f9;
 }
 
-.knowledge-domain-management h5 {
+.knowledge-domain-management h4 {
     margin: 0 0 10px 0;
     color: #333;
-    font-size: 1.1em;
+    font-size: 1.2em;
     font-weight: 600;
 }
 
@@ -431,6 +434,14 @@
     color: #666;
     font-size: 14px;
     line-height: 1.4;
+}
+
+.knowledge-fields-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 400px;
+    padding-right: 8px;
+    margin-bottom: 20px;
 }
 
 .knowledge-fields-list {
@@ -539,6 +550,17 @@
 
 .domain-actions {
     margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.domain-actions-sticky {
+    position: sticky;
+    bottom: 0;
+    background-color: #f9f9f9;
+    padding: 15px 0;
+    margin-top: 20px;
+    border-top: 1px solid #e0e0e0;
     display: flex;
     justify-content: flex-end;
 }
