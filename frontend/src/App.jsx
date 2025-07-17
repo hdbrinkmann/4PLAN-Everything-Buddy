@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal, useIsAuthenticated } from "@azure/msal-react";
 import io from 'socket.io-client';
@@ -97,6 +98,20 @@ function MainContent() {
     const [loadedHistoryId, setLoadedHistoryId] = useState(null); // Track loaded history entry to delete later
     const [isAwaitingClarification, setIsAwaitingClarification] = useState(false);
     const [messageRatings, setMessageRatings] = useState({}); // Track ratings for messages
+    
+    // Sidebar state with localStorage persistence
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
+        try {
+            const saved = localStorage.getItem('sidebarExpanded');
+            return saved ? JSON.parse(saved) : false; // Default to collapsed
+        } catch (error) {
+            console.error('Error reading sidebar state:', error);
+            return false; // Fallback to collapsed
+        }
+    });
+    
+    // Track if window is wide enough for expansion
+    const [isWindowWideEnough, setIsWindowWideEnough] = useState(window.innerWidth > 768);
     const isCancellingRef = useRef(isCancelling);
     const processingMessageIdRef = useRef(null); // Use a ref to avoid stale state in socket listener
     const messagesEndRef = useRef(null);
@@ -118,9 +133,11 @@ function MainContent() {
     useEffect(() => {
         const textarea = textareaRef.current;
         if (textarea) {
-            textarea.style.height = 'auto'; // Reset height to get the correct scrollHeight
+            textarea.style.height = '48px'; // Reset to single line height
             const scrollHeight = textarea.scrollHeight;
-            textarea.style.height = `${scrollHeight}px`; // Set the new height
+            const maxHeight = 120; // Limit expansion to about 3 lines
+            const newHeight = Math.min(scrollHeight, maxHeight);
+            textarea.style.height = `${newHeight}px`;
         }
         // Update the container height for positioning the action buttons
         if (chatInputAreaRef.current) {
@@ -135,6 +152,36 @@ function MainContent() {
     useEffect(() => {
         isCancellingRef.current = isCancelling;
     }, [isCancelling]);
+
+    // Persist sidebar state to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('sidebarExpanded', JSON.stringify(isSidebarExpanded));
+        } catch (error) {
+            console.error('Error saving sidebar state:', error);
+        }
+    }, [isSidebarExpanded]);
+
+    // Auto-collapse sidebar when window becomes too narrow
+    useEffect(() => {
+        const handleResize = () => {
+            const breakpoint = 768; // Same as CSS media query
+            const isWide = window.innerWidth > breakpoint;
+            
+            setIsWindowWideEnough(isWide);
+            
+            if (!isWide && isSidebarExpanded) {
+                setIsSidebarExpanded(false);
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        
+        // Check on initial load
+        handleResize();
+
+        return () => window.removeEventListener('resize', handleResize);
+    }, [isSidebarExpanded]);
 
     useEffect(() => {
         if (accessToken) {
@@ -1168,6 +1215,10 @@ function MainContent() {
         }
     };
 
+    const handleToggleSidebar = () => {
+        setIsSidebarExpanded(prev => !prev);
+    };
+
     const isChatDisabled = !socket || status.includes('Thinking') || status.includes('Updating') || status.includes('Uploading') || isRecording || isProcessingRag || isAwaitingClarification;
 
     // Generate dynamic file accept string based on available features
@@ -1208,15 +1259,30 @@ function MainContent() {
             >
                 <p>This process can take a very long time. Do you really want to start the process?</p>
             </ConfirmDialog>
-            <aside className="sidebar">
+            <aside className={`sidebar ${isSidebarExpanded ? 'expanded' : 'collapsed'}`}>
                 <div className="sidebar-header">
                     <img src="/S4ULogo.png" alt="Logo" className="logo" />
-                    <h2>Everything Buddy</h2>
+                    {isSidebarExpanded && <h2>Everything Buddy</h2>}
                 </div>
+                {isWindowWideEnough && (
+                    <div className="sidebar-toggle-container">
+                        <button 
+                            className="sidebar-toggle-btn" 
+                            onClick={handleToggleSidebar}
+                            title={isSidebarExpanded ? "Collapse navigation" : "Expand navigation"}
+                        >
+                            <span className="hamburger-icon">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </span>
+                        </button>
+                    </div>
+                )}
                 <div className="sidebar-actions">
                     <button onClick={handleNewDialog}>
                         <img src={newDialogIcon} alt="New Dialog" className="sidebar-action-icon" />
-                        <span className="sidebar-action-text">New Dialog</span>
+                        {isSidebarExpanded && <span className="sidebar-action-text">New Dialog</span>}
                     </button>
                     {isAdmin && (
                         <button 
@@ -1225,36 +1291,40 @@ function MainContent() {
                             title={uploadedFileContent ? "Administration ist während der Dateianalyse nicht verfügbar" : "Administration"}
                         >
                             <img src={updateKBIcon} alt="Administration" className="sidebar-action-icon" />
-                            <span className="sidebar-action-text">Administration</span>
+                            {isSidebarExpanded && <span className="sidebar-action-text">Administration</span>}
                         </button>
                     )}
-                    <button onClick={() => setIsKnowledgeFieldModalOpen(true)} className="sidebar-action-mobile-only" disabled={!!uploadedFileContent}>
-                        <img src={knowledgeFieldsIcon} alt="Knowledge Fields" className="sidebar-action-icon" />
-                    </button>
+                    {!isSidebarExpanded && (
+                        <button onClick={() => setIsKnowledgeFieldModalOpen(true)} disabled={!!uploadedFileContent} title="Knowledge Fields">
+                            <img src={knowledgeFieldsIcon} alt="Knowledge Fields" className="sidebar-action-icon" />
+                        </button>
+                    )}
                 </div>
 
-                {uploadedFileName ? (
-                    <div className="sidebar-knowledge-fields-desktop">
-                        <h4>Uploaded File</h4>
-                        <p className="uploaded-file-name" title={uploadedFileName}>
-                            {uploadedFileName}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="sidebar-knowledge-fields-desktop">
-                        <h4>
-                            <img src={knowledgeFieldsIcon} alt="Knowledge Fields" className="sidebar-action-icon" />
-                            Knowledge Fields
-                        </h4>
-                        <div className="knowledge-fields-body">
-                            <MultiSelectDropdown
-                                options={knowledgeFields}
-                                selectedOptions={selectedFields}
-                                onChange={handleFieldSelection}
-                                isDisabled={isChatDisabled}
-                            />
+                {isSidebarExpanded && (
+                    uploadedFileName ? (
+                        <div className="sidebar-knowledge-fields-desktop">
+                            <h4>Uploaded File</h4>
+                            <p className="uploaded-file-name" title={uploadedFileName}>
+                                {uploadedFileName}
+                            </p>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="sidebar-knowledge-fields-desktop">
+                            <h4>
+                                <img src={knowledgeFieldsIcon} alt="Knowledge Fields" className="sidebar-action-icon" />
+                                Knowledge Fields
+                            </h4>
+                            <div className="knowledge-fields-body">
+                                <MultiSelectDropdown
+                                    options={knowledgeFields}
+                                    selectedOptions={selectedFields}
+                                    onChange={handleFieldSelection}
+                                    isDisabled={isChatDisabled}
+                                />
+                            </div>
+                        </div>
+                    )
                 )}
 
                 {isKnowledgeFieldModalOpen && (
@@ -1276,58 +1346,62 @@ function MainContent() {
                     </div>
                 )}
 
-                <div className="sidebar-status">
-                    <div className="status-line">
-                        <strong>Status:</strong> {status}
+                {isSidebarExpanded && (
+                    <div className="sidebar-status">
+                        <div className="status-line">
+                            <strong>Status:</strong> {status}
+                        </div>
+                        <div className="mode-icon-container">
+                            {sourceMode === 'rag_document' ? (
+                                <img src={localFileIcon} alt="Local Document RAG Mode" title="Local Document RAG Mode" />
+                            ) : chatMode === 'image_chat' ? (
+                                <img src={imageIcon} alt="Image Analysis Mode" title="Image Analysis Mode" />
+                            ) : chatMode === 'document_chat' ? (
+                                (uploadedFileType === 'text' || uploadedFileType === 'sql') ? (
+                                    <img src={textFileIcon} alt="Text/SQL File Mode" title="Text/SQL File Mode" />
+                                ) : (uploadedFileType === 'rag_document') ? (
+                                    <img src={docFileIcon} alt="Document File Mode" title="Document File Mode" />
+                                ) : (
+                                    <img src={fileAnalysisIcon} alt="File Analysis Mode" title="File Analysis Mode" />
+                                )
+                            ) : sourceMode === 'web_search' ? (
+                                <img src={webIcon} alt="Web Search Mode" title="Web Search Mode" />
+                            ) : sourceMode === 'image_generation' ? (
+                                <img src={pinselIcon} alt="Image Generation Mode" title="Image Generation Mode" />
+                            ) : sourceMode === 'vector_store' ? (
+                                <img src={documentationIcon} alt="Documentation Mode" title="Documentation Mode" />
+                            ) : null}
+                        </div>
                     </div>
-                <div className="mode-icon-container">
-                    {sourceMode === 'rag_document' ? (
-                        <img src={localFileIcon} alt="Local Document RAG Mode" title="Local Document RAG Mode" />
-                    ) : chatMode === 'image_chat' ? (
-                        <img src={imageIcon} alt="Image Analysis Mode" title="Image Analysis Mode" />
-                    ) : chatMode === 'document_chat' ? (
-                        (uploadedFileType === 'text' || uploadedFileType === 'sql') ? (
-                            <img src={textFileIcon} alt="Text/SQL File Mode" title="Text/SQL File Mode" />
-                        ) : (uploadedFileType === 'rag_document') ? (
-                            <img src={docFileIcon} alt="Document File Mode" title="Document File Mode" />
-                        ) : (
-                            <img src={fileAnalysisIcon} alt="File Analysis Mode" title="File Analysis Mode" />
-                        )
-                    ) : sourceMode === 'web_search' ? (
-                        <img src={webIcon} alt="Web Search Mode" title="Web Search Mode" />
-                    ) : sourceMode === 'image_generation' ? (
-                        <img src={pinselIcon} alt="Image Generation Mode" title="Image Generation Mode" />
-                    ) : sourceMode === 'vector_store' ? (
-                        <img src={documentationIcon} alt="Documentation Mode" title="Documentation Mode" />
-                    ) : null}
-                </div>
-                </div>
+                )}
                 <div className="sidebar-user">
-                    <div className="mobile-mode-icon">
-                        {sourceMode === 'rag_document' ? (
-                            <img src={localFileIcon} alt="Local Document RAG Mode" title="Local Document RAG Mode" />
-                        ) : chatMode === 'image_chat' ? (
-                            <img src={imageIcon} alt="Image Analysis Mode" title="Image Analysis Mode" />
-                        ) : chatMode === 'document_chat' ? (
-                            (uploadedFileType === 'text' || uploadedFileType === 'sql') ? (
-                                <img src={textFileIcon} alt="Text/SQL File Mode" title="Text/SQL File Mode" />
-                            ) : (uploadedFileType === 'rag_document') ? (
-                                <img src={docFileIcon} alt="Document File Mode" title="Document File Mode" />
-                            ) : (
-                                <img src={fileAnalysisIcon} alt="File Analysis Mode" title="File Analysis Mode" />
-                            )
-                        ) : sourceMode === 'web_search' ? (
-                            <img src={webIcon} alt="Web Search Mode" title="Web Search Mode" />
-                        ) : sourceMode === 'image_generation' ? (
-                            <img src={pinselIcon} alt="Image Generation Mode" title="Image Generation Mode" />
-                        ) : sourceMode === 'vector_store' ? (
-                            <img src={documentationIcon} alt="Documentation Mode" title="Documentation Mode" />
-                        ) : null}
-                    </div>
+                    {!isSidebarExpanded && (
+                        <div className="mobile-mode-icon">
+                            {sourceMode === 'rag_document' ? (
+                                <img src={localFileIcon} alt="Local Document RAG Mode" title="Local Document RAG Mode" />
+                            ) : chatMode === 'image_chat' ? (
+                                <img src={imageIcon} alt="Image Analysis Mode" title="Image Analysis Mode" />
+                            ) : chatMode === 'document_chat' ? (
+                                (uploadedFileType === 'text' || uploadedFileType === 'sql') ? (
+                                    <img src={textFileIcon} alt="Text/SQL File Mode" title="Text/SQL File Mode" />
+                                ) : (uploadedFileType === 'rag_document') ? (
+                                    <img src={docFileIcon} alt="Document File Mode" title="Document File Mode" />
+                                ) : (
+                                    <img src={fileAnalysisIcon} alt="File Analysis Mode" title="File Analysis Mode" />
+                                )
+                            ) : sourceMode === 'web_search' ? (
+                                <img src={webIcon} alt="Web Search Mode" title="Web Search Mode" />
+                            ) : sourceMode === 'image_generation' ? (
+                                <img src={pinselIcon} alt="Image Generation Mode" title="Image Generation Mode" />
+                            ) : sourceMode === 'vector_store' ? (
+                                <img src={documentationIcon} alt="Documentation Mode" title="Documentation Mode" />
+                            ) : null}
+                        </div>
+                    )}
                     {accounts && accounts.length > 0 && (
                         <div className="user-info" onClick={handleLogout} title="Logout">
                             <img src={logoutIcon} alt="Logout" className="sidebar-action-icon" />
-                            <span>Logout</span>
+                            {isSidebarExpanded && <span>Logout</span>}
                         </div>
                     )}
                 </div>

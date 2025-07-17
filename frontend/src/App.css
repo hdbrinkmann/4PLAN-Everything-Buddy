@@ -31,7 +31,6 @@ body, html {
 
 /* --- Sidebar --- */
 .sidebar {
-  width: 280px;
   flex-shrink: 0;
   background-color: var(--secondary-bg);
   padding: 20px;
@@ -40,14 +39,72 @@ body, html {
   flex-direction: column;
   border-right: 1px solid var(--border-color);
   position: relative; /* Needed for absolute positioning of the logout button */
+  transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+  padding: 20px 10px;
+}
+
+.sidebar.expanded {
+  width: 280px;
 }
 
 .sidebar-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
+
+.sidebar-toggle-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.sidebar-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.hamburger-icon {
+  display: flex;
+  flex-direction: column;
+  width: 18px;
+  height: 14px;
+  justify-content: space-between;
+}
+
+.hamburger-icon span {
+  height: 2px;
+  background-color: var(--text-primary);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+.hamburger-icon span:first-child {
+  width: 100%;
+}
+
+.hamburger-icon span:nth-child(2) {
+  width: 80%;
+}
+
+.hamburger-icon span:last-child {
+  width: 100%;
+}
+
+/* Keep hamburger icon the same in both states */
 
 .logo {
   width: 100%;
@@ -225,7 +282,15 @@ body, html {
 }
 
 .mobile-mode-icon {
-  display: none;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  height: 28px;
+}
+
+.mobile-mode-icon img {
+  height: 100%;
+  width: auto;
 }
 
 /* --- Chat Area --- */
@@ -552,7 +617,7 @@ body, html {
   font-size: 1rem;
   font-family: inherit; /* Ensure textarea uses the same font */
   line-height: 1.4;
-  min-height: 48px; /* Minimum height matches the old input */
+  height: 48px; /* Fixed height for single line */
   max-height: 200px; /* Maximum height before scrolling */
   resize: none; /* Disable manual resizing by the user */
   overflow-y: auto; /* Add scrollbar when content exceeds max-height */
@@ -793,56 +858,6 @@ body, html {
 
 /* --- Responsive Design --- */
 @media (max-width: 768px) {
-  .sidebar {
-    width: 80px;
-    padding: 20px 10px;
-  }
-
-  .sidebar-header h2 {
-    display: none;
-  }
-
-  .sidebar-action-text {
-    display: none;
-  }
-
-  .sidebar-actions button {
-    padding: 12px;
-    justify-content: center;
-  }
-
-  .sidebar-knowledge-fields-desktop {
-    display: none; /* Hide the desktop version on mobile */
-  }
-
-  .sidebar-actions .sidebar-action-mobile-only {
-    display: flex; /* Show the mobile button */
-  }
-
-  .sidebar-action-mobile-only .sidebar-action-icon {
-    filter: brightness(0) invert(1); /* A more robust way to make the icon white */
-  }
-
-  .sidebar-status {
-    display: none; /* Hide status bar on mobile */
-  }
-
-  .mobile-mode-icon {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 10px;
-    height: 28px;
-  }
-
-  .mobile-mode-icon img {
-    height: 100%;
-    width: auto;
-  }
-
-  .sidebar-user span {
-    display: none;
-  }
-
   .chat-action-buttons {
     bottom: 75px;
     right: 10px;
