@@ -100,14 +100,21 @@ async def auth_middleware(request: Request, call_next):
             content={"detail": e.detail}
         )
 
+# Configure Socket.IO with sub-path support
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=origins,
     ping_timeout=120,  # Increased timeout to 120 seconds
     ping_interval=60   # Increased interval to 60 seconds
 )
+
+# Configure Socket.IO path based on BASE_PATH
+socket_path = '/socket.io/'
+if BASE_PATH:
+    socket_path = f'{BASE_PATH}/socket.io/'
+
 # The final ASGI app that combines FastAPI and Socket.IO
-app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
+app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path=socket_path)
 
 logic = AppLogic()
 
