@@ -326,6 +326,7 @@ body, html {
   display: flex;
   flex-direction: column;
   /* max-width is now handled by more specific rules */
+  animation: fadeInScale 0.4s ease-out;
 }
 
 .chat-message.user,
@@ -335,10 +336,12 @@ body, html {
 
 .chat-message.user {
   align-self: flex-end;
+  animation: slideInFromRight 0.4s ease-out;
 }
 
 .chat-message.assistant {
   align-self: flex-start;
+  animation: slideInFromLeft 0.4s ease-out;
 }
 
 .chat-message.chart-message {
@@ -556,7 +559,7 @@ body, html {
 }
 
 .chat-input-form .upload-btn {
-  background-color: var(--accent-color);
+  background: var(--accent-gradient);
   color: white;
   border: none;
   width: 48px;
@@ -567,18 +570,21 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
   padding: 0;
   line-height: 1;
+  box-shadow: var(--shadow-button);
 }
 
 .chat-input-form .upload-btn:hover {
-  background-color: #6b140e;
+  background: var(--accent-gradient);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-button-hover);
 }
 
 .chat-input-form .cancel-btn {
-  background-color: var(--accent-color);
-  border: 1px solid var(--accent-color);
+  background: var(--accent-gradient);
+  border: none;
   width: 48px;
   height: 48px;
   border-radius: 18px;
@@ -586,12 +592,15 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
   padding: 0;
+  box-shadow: var(--shadow-button);
 }
 
 .chat-input-form .cancel-btn:hover {
-  background-color: #6b140e;
+  background: var(--accent-gradient);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-button-hover);
 }
 
 .chat-input-form .cancel-btn img {
@@ -611,11 +620,14 @@ body, html {
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-light);
 }
 
 .chat-input-form .record-btn:hover {
   background-color: #e4e6eb;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-medium);
 }
 
 .chat-input-form .record-btn.recording {
@@ -629,10 +641,9 @@ body, html {
   height: 24px;
 }
 
-
 .chat-input-form textarea {
   flex: 1;
-  padding: 14px;
+  padding: 14px 18px;
   border-radius: 18px;
   border: 1px solid var(--border-color);
   background-color: var(--tertiary-bg);
@@ -645,11 +656,15 @@ body, html {
   resize: none; /* Disable manual resizing by the user */
   overflow-y: auto; /* Add scrollbar when content exceeds max-height */
   box-sizing: border-box;
+  box-shadow: var(--shadow-light);
+  transition: all 0.3s ease;
 }
 
 .chat-input-form textarea:focus {
   outline: none;
   border-color: var(--accent-color);
+  box-shadow: var(--shadow-medium);
+  transform: translateY(-1px);
 }
 
 .chat-input-form button[type="submit"] {
@@ -657,15 +672,18 @@ body, html {
   height: 48px;
   border-radius: 18px;
   border: none;
-  background-color: var(--accent-color);
+  background: var(--accent-gradient);
   color: white;
   font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-button);
 }
 
 .chat-input-form button[type="submit"]:hover {
-  background-color: #6b140e;
+  background: var(--accent-gradient);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-button-hover);
 }
 
 .chat-input-form button:disabled {
@@ -716,6 +734,48 @@ body, html {
   }
   100% {
       box-shadow: 0 0 0 0 rgba(138, 26, 17, 0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
   }
 }
 
