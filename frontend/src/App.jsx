@@ -1610,7 +1610,7 @@ function MainContent() {
                                 <img src={cancelIcon} alt="Cancel" />
                             </button>
                         ) : (
-                            <button type="button" onClick={triggerFileInput} className="upload-btn" disabled={isChatDisabled}>
+                            <button type="button" onClick={triggerFileInput} className="upload-btn" disabled={isChatDisabled} title="Upload file">
                                 +
                             </button>
                         )}
@@ -1619,10 +1619,11 @@ function MainContent() {
                             onClick={handleToggleRecording} 
                             className={`record-btn ${isRecording ? 'recording' : ''}`}
                             disabled={isChatDisabled && !isRecording}
+                            title="Start recording"
                         >
                             <img src={microphoneIcon} alt="Record" />
                         </button>
-                        <button type="submit" disabled={!socket || !inputValue.trim() || isChatDisabled}>Send</button>
+                        <button type="submit" disabled={!socket || !inputValue.trim() || isChatDisabled} title="Submit question">Send</button>
                     </form>
                 </div>
             </main>
