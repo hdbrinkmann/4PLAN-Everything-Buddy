@@ -671,7 +671,7 @@ function MainContent() {
         setIsAwaitingClarification(false);
     };
 
-    const handleNewDialog = () => {
+    const handleNewDialog = async () => {
         // Check if current chat is saveable and auto-save it before starting new dialog
         if (messages.length >= 2 && chatMode === 'knowledge_base' && !uploadedFileContent) {
             // Check for content that should prevent saving (files, generated content, etc.)
@@ -712,6 +712,22 @@ function MainContent() {
                 .catch(error => console.error('Error auto-saving current chat:', error));
             } else {
                 console.log('Chat not saved - contains unsaveable content or no valid content');
+            }
+        }
+
+        // Delete the loaded history entry if one exists (prevents duplicates)
+        if (loadedHistoryId) {
+            try {
+                await fetch(`${API_URL}/chat_history/${loadedHistoryId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                });
+                setLoadedHistoryId(null); // Clear the loaded history ID
+                console.log('Loaded history entry deleted to prevent duplicates');
+            } catch (error) {
+                console.error('Error deleting loaded history entry:', error);
             }
         }
 
