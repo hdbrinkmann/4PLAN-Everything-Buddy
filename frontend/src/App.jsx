@@ -1309,8 +1309,16 @@ function MainContent() {
                         </button>
                     )}
                     {!isSidebarExpanded && (
-                        <button onClick={() => setIsKnowledgeFieldModalOpen(true)} disabled={!!uploadedFileContent} title="Knowledge Fields">
+                        <button 
+                            onClick={() => setIsKnowledgeFieldModalOpen(true)} 
+                            disabled={!!uploadedFileContent} 
+                            title={knowledgeFields.length > 0 ? `Knowledge Fields (${selectedFields.length}/${knowledgeFields.length} selected)` : "Knowledge Fields"}
+                            className={`knowledge-fields-btn ${selectedFields.length < knowledgeFields.length && knowledgeFields.length > 0 ? 'partial-selection' : ''}`}
+                        >
                             <img src={knowledgeFieldsIcon} alt="Knowledge Fields" className="sidebar-action-icon" />
+                            {selectedFields.length < knowledgeFields.length && knowledgeFields.length > 0 && (
+                                <span className="selection-badge"></span>
+                            )}
                         </button>
                     )}
                 </div>

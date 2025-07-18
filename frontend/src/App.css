@@ -177,6 +177,28 @@ body, html {
   opacity: 0.6;
 }
 
+/* Knowledge Fields Button - Partial Selection Indicator */
+.knowledge-fields-btn {
+  position: relative;
+}
+
+.knowledge-fields-btn.partial-selection {
+  border: 2px solid #ff9800;
+  background: linear-gradient(135deg, #8A1A11 0%, #a82b1f 100%);
+}
+
+.selection-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 12px;
+  height: 12px;
+  background-color: #ff9800;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 .sidebar-knowledge-fields-desktop {
     margin-bottom: 20px;
     border: 1px solid var(--border-color);
