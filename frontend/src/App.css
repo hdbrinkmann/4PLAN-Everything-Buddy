@@ -278,16 +278,19 @@ body, html {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     padding: 12px;
-    border-radius: 18px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 1rem; /* Match other buttons */
-    transition: background-color 0.2s;
+    transition: all 0.3s ease;
     height: 48px;
     box-sizing: border-box;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .user-info:hover {
     background-color: #e4e6eb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .user-info .sidebar-action-icon {
@@ -587,7 +590,7 @@ body, html {
   border: none;
   width: 48px;
   height: 48px;
-  border-radius: 18px;
+  border-radius: 8px;
   font-size: 1.5rem;
   cursor: pointer;
   display: flex;
@@ -610,7 +613,7 @@ body, html {
   border: none;
   width: 48px;
   height: 48px;
-  border-radius: 18px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -693,7 +696,7 @@ body, html {
 .chat-input-form button[type="submit"] {
   padding: 0 25px;
   height: 48px;
-  border-radius: 18px;
+  border-radius: 8px;
   border: none;
   background: var(--accent-gradient);
   color: white;
