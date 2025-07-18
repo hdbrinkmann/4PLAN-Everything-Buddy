@@ -1851,6 +1851,7 @@ def can_answer_from_conversation_context(client, conversation_history: list) -> 
     """
     Checks if the current question can be answered using information from previous assistant responses in the conversation.
     This is crucial for follow-up questions like "Empfiehlst Du einen Regenschirm" after a weather-related answer.
+    Enhanced with more conservative assessment to prevent poor answers from insufficient context.
     """
     # Enhanced analysis that works better with web-search results and loaded history
     conversation_text = ""
@@ -1864,26 +1865,34 @@ def can_answer_from_conversation_context(client, conversation_history: list) -> 
 **COMPLETE CONVERSATION TO ANALYZE:**
 {conversation_text}
 
-**Enhanced Guidelines:**
+**CONSERVATIVE ASSESSMENT GUIDELINES:**
 - Look at the user's latest question and check if it's a follow-up that relates to information the assistant has already provided.
 - **IMPORTANT**: Web search results, weather information, news, and other factual data from previous assistant responses COUNT as available context.
-- Examples of answerable follow-ups:
+- **CRITICAL**: Only answer YES if the existing context contains SUFFICIENT and SPECIFIC information to provide a GOOD answer to the user's latest question.
+
+**Examples of answerable follow-ups:**
   * After weather info about Miami rain → "Should I bring an umbrella?" (YES - can be answered from weather context)
   * After explaining a company policy → "What are the penalties?" (YES - if penalties were mentioned)
   * After providing financial data → "Is that good or bad?" (YES - can provide analysis based on the data)
   * After travel information → "What should I pack?" (YES - can be answered from travel context)
   * After any factual information → "What does this mean for me?" (YES - can provide analysis)
 
+**Examples of NON-answerable follow-ups (should be NO):**
+  * After general Munich events info → "Are there rock concerts?" (NO - unless specific rock concert info was provided)
+  * After basic weather info → "What's the hourly forecast?" (NO - unless hourly details were provided)
+  * After company overview → "What's their stock price?" (NO - unless financial info was provided)
+
 **Analysis Method:**
 1. Read the COMPLETE CONVERSATION above
-2. Identify what factual information, data, or details the assistant has already provided
-3. Check if the user's latest question is asking for advice, analysis, or recommendations based on that existing information
-4. Consider web search results, weather data, news, or any other information as valid context
+2. Identify what SPECIFIC information the assistant has already provided
+3. Check if the user's latest question asks for information that is DIRECTLY available or easily derivable from that context
+4. **Quality Check**: Can the existing context provide a COMPREHENSIVE and USEFUL answer, not just a vague or partial one?
 
 **Critical Rules:**
-- If the assistant previously provided any relevant factual information that could inform the user's latest question, answer YES
-- Only answer NO if the latest question requires completely new external information
-- Questions asking for advice, recommendations, or analysis based on previous assistant responses should be YES
+- If the assistant previously provided SPECIFIC relevant information that can COMPREHENSIVELY answer the user's latest question, answer YES
+- If the latest question requires NEW external information or more specific details than what's available, answer NO
+- Questions asking for advice based on previous responses should be YES only if the context is sufficient for good advice
+- When in doubt, lean towards NO to ensure high-quality answers
 
 Respond with only 'yes' or 'no'.
 """
@@ -1897,6 +1906,79 @@ Respond with only 'yes' or 'no'.
     except Exception as e:
         print(f"Error during can_answer_from_conversation_context check: {e}")
         return False
+
+def assess_context_quality_for_followup(client, conversation_history: list, cancellation_check=lambda: False) -> dict:
+    """
+    Assesses the quality of existing conversation context for answering a follow-up question.
+    Returns a quality score and recommendations for fallback actions.
+    """
+    # Build conversation context for analysis
+    conversation_text = ""
+    for i, msg in enumerate(conversation_history):
+        role = msg.get('role', 'unknown')
+        content = msg.get('content', '')
+        conversation_text += f"{role.upper()}: {content}\n\n"
+    
+    system_prompt = f"""You are an expert context quality assessor. Your task is to evaluate whether the existing conversation context can provide a HIGH-QUALITY answer to the user's latest question.
+
+**COMPLETE CONVERSATION TO ANALYZE:**
+{conversation_text}
+
+**Assessment Criteria:**
+1. **Information Completeness**: Does the context contain specific, detailed information to fully answer the user's latest question?
+2. **Information Relevance**: Is the available information directly relevant to what the user is asking?
+3. **Answer Quality Potential**: Can the context provide a comprehensive, useful answer (not just a partial or vague response)?
+
+**Scoring Guidelines:**
+- **High Quality (0.8-1.0)**: Context contains comprehensive, specific information that can fully answer the question
+- **Medium Quality (0.4-0.7)**: Context contains some relevant information but may be incomplete or require interpretation
+- **Low Quality (0.0-0.3)**: Context lacks sufficient information or contains only tangentially related information
+
+**Examples:**
+- After detailed Munich weather forecast → "Should I bring an umbrella?" = HIGH (specific weather details available)
+- After general Munich events info → "Are there rock concerts?" = LOW (no specific rock concert information)
+- After company policy details → "What are the penalties?" = HIGH if penalties mentioned, LOW if not mentioned
+
+**Response Format:**
+Return ONLY a JSON object:
+{{
+  "quality_score": 0.85,
+  "assessment": "high|medium|low",
+  "reason": "Brief explanation of the assessment",
+  "recommended_action": "use_context|fallback_to_web_search|ask_for_clarification"
+}}
+
+Respond with ONLY the JSON object, nothing else.
+"""
+    messages = create_contextual_messages(conversation_history, system_prompt)
+    try:
+        if cancellation_check(): return {"quality_score": 0.0, "assessment": "low", "reason": "Assessment cancelled", "recommended_action": "ask_for_clarification"}
+        
+        response = robust_api_call(client, FAST_MODEL, messages, 0.1)
+        if response.choices and response.choices[0].message.content:
+            content = response.choices[0].message.content.strip()
+            
+            # Clean JSON if wrapped in markdown
+            if content.startswith("```json"):
+                content = content[7:-3].strip()
+            elif content.startswith("```"):
+                content = content[3:-3].strip()
+            
+            try:
+                assessment = json.loads(content)
+                return {
+                    "quality_score": assessment.get("quality_score", 0.0),
+                    "assessment": assessment.get("assessment", "low"),
+                    "reason": assessment.get("reason", "Unknown assessment"),
+                    "recommended_action": assessment.get("recommended_action", "ask_for_clarification")
+                }
+            except json.JSONDecodeError:
+                return {"quality_score": 0.0, "assessment": "low", "reason": "Failed to parse assessment", "recommended_action": "ask_for_clarification"}
+        
+        return {"quality_score": 0.0, "assessment": "low", "reason": "No assessment received", "recommended_action": "ask_for_clarification"}
+    except Exception as e:
+        print(f"Error during context quality assessment: {e}")
+        return {"quality_score": 0.0, "assessment": "low", "reason": f"Assessment error: {e}", "recommended_action": "ask_for_clarification"}
 
 def extract_context_keywords(client, conversation_history: list) -> list[str]:
     """
@@ -2464,8 +2546,28 @@ async def get_answer(conversation_history: list, source_mode: str = None, select
                 can_use_context = await asyncio.to_thread(can_answer_from_conversation_context, client, conversation_history)
                 
                 if can_use_context:
-                    yield {"type": "status", "data": "Question can be answered from conversation context"}
-                    determined_source_mode = "context_answer"
+                    # NEW: Additional context quality assessment for better fallback decisions
+                    yield {"type": "status", "data": "Assessing context quality for comprehensive answer..."}
+                    context_quality = await asyncio.to_thread(assess_context_quality_for_followup, client, conversation_history, cancellation_check)
+                    
+                    if context_quality["quality_score"] >= 0.6:  # High quality threshold
+                        yield {"type": "status", "data": f"Context quality sufficient ({context_quality['quality_score']:.2f}) - using conversation context"}
+                        determined_source_mode = "context_answer"
+                    elif context_quality["recommended_action"] == "fallback_to_web_search":
+                        # Check if web search is available for fallback
+                        features = load_features()
+                        web_search_available = features.get("web_search", True) and 'Web' in selected_fields
+                        
+                        if web_search_available:
+                            yield {"type": "status", "data": f"Context quality insufficient ({context_quality['quality_score']:.2f}) - falling back to web search"}
+                            determined_source_mode = 'web_search'
+                        else:
+                            yield {"type": "status", "data": "Context quality insufficient but web search unavailable - using available context"}
+                            determined_source_mode = "context_answer"
+                    else:
+                        # Use context even if quality is medium
+                        yield {"type": "status", "data": f"Context quality acceptable ({context_quality['quality_score']:.2f}) - using conversation context"}
+                        determined_source_mode = "context_answer"
                 else:
                     # STEP 3: Normal routing logic for questions that need external sources
                     yield {"type": "status", "data": "Routing query for external sources..."}
