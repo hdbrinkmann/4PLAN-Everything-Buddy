@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 from app_logic import AppLogic
 from auth import verify_token, get_current_user
-from database import SessionLocal, User, LoginSession, ChatQuestionLog, FaultyCodeLog, get_db_with_retry, test_db_connection
+from database import SessionLocal, User, LoginSession, ChatQuestionLog, FaultyCodeLog, FeedbackEntry, get_db_with_retry, test_db_connection
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from pydantic import BaseModel
@@ -161,6 +161,10 @@ class KnowledgeFieldDomain(BaseModel):
 class QuestionRating(BaseModel):
     question_id: int
     rating: str  # 'good' or 'poor'
+
+class FeedbackCreate(BaseModel):
+    feedback_type: str  # 'Issue', 'Idea', 'Other'
+    feedback_text: str
 
 @fastapi_app.get("/favorites/")
 async def get_favorites(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -812,6 +816,132 @@ async def rate_question(rating: QuestionRating, db: Session = Depends(get_db), u
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error rating question: {str(e)}")
+
+# --- Feedback Endpoints ---
+@fastapi_app.post("/feedback/")
+async def submit_feedback(feedback: FeedbackCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Submit user feedback."""
+    try:
+        # Validate feedback type
+        valid_types = ['Issue', 'Idea', 'Other']
+        if feedback.feedback_type not in valid_types:
+            raise HTTPException(status_code=400, detail="Invalid feedback type")
+        
+        # Validate feedback text
+        if not feedback.feedback_text or not feedback.feedback_text.strip():
+            raise HTTPException(status_code=400, detail="Feedback text cannot be empty")
+        
+        if len(feedback.feedback_text) > 5000:  # Reasonable limit
+            raise HTTPException(status_code=400, detail="Feedback text too long (max 5000 characters)")
+        
+        # Create feedback entry
+        feedback_entry = FeedbackEntry(
+            user_id=user.id,
+            feedback_type=feedback.feedback_type,
+            feedback_text=feedback.feedback_text.strip(),
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(feedback_entry)
+        db.commit()
+        
+        return {"status": "success", "message": "Feedback submitted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+
+@fastapi_app.get("/admin/feedback_entries")
+async def get_feedback_entries(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Gets feedback entries for admin review."""
+    check_admin_access(user)
+    
+    try:
+        # Get all feedback entries with user information
+        feedback_entries = db.query(FeedbackEntry).join(User).order_by(desc(FeedbackEntry.created_at)).all()
+        
+        result = []
+        for entry in feedback_entries:
+            result.append({
+                "id": entry.id,
+                "username": entry.user.username,
+                "feedback_type": entry.feedback_type,
+                "feedback_text": entry.feedback_text,
+                "created_at": entry.created_at.isoformat()
+            })
+        
+        return {"feedback_entries": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching feedback entries: {str(e)}")
+
+@fastapi_app.post("/admin/export_feedback_entries")
+async def export_feedback_entries(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Exports feedback entries to Excel."""
+    check_admin_access(user)
+    
+    try:
+        # Get all feedback entries with user information
+        feedback_entries = db.query(FeedbackEntry).join(User).order_by(desc(FeedbackEntry.created_at)).all()
+        
+        if not feedback_entries:
+            # Return empty Excel file if no data
+            df = pd.DataFrame(columns=["User", "Time", "Type", "Feedback"])
+        else:
+            data = []
+            german_tz = pytz.timezone('Europe/Berlin')
+            
+            for entry in feedback_entries:
+                try:
+                    # Convert UTC time to German timezone
+                    if entry.created_at.tzinfo is None:
+                        # If timestamp is naive, assume it's UTC
+                        timestamp_utc = entry.created_at.replace(tzinfo=pytz.UTC)
+                    else:
+                        timestamp_utc = entry.created_at.astimezone(pytz.UTC)
+                    
+                    timestamp_german = timestamp_utc.astimezone(german_tz)
+                    
+                    data.append({
+                        "User": str(entry.user.username),
+                        "Time": timestamp_german.strftime("%d.%m.%Y %H:%M:%S"),
+                        "Type": str(entry.feedback_type),
+                        "Feedback": str(entry.feedback_text)
+                    })
+                except Exception as item_error:
+                    print(f"Error processing feedback entry {entry.id}: {item_error}")
+                    continue
+            
+            # Create DataFrame
+            df = pd.DataFrame(data)
+        
+        # Create Excel file
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Feedback', index=False)
+            
+            # Format the Excel file
+            workbook = writer.book
+            worksheet = writer.sheets['Feedback']
+            
+            # Set column widths
+            worksheet.set_column('A:A', 30)  # User
+            worksheet.set_column('B:B', 20)  # Time
+            worksheet.set_column('C:C', 15)  # Type
+            worksheet.set_column('D:D', 80)  # Feedback
+        
+        excel_buffer.seek(0)
+        
+        return StreamingResponse(
+            io.BytesIO(excel_buffer.read()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment;filename=feedback.xlsx"}
+        )
+    except Exception as e:
+        import traceback
+        print(f"Excel export error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error exporting feedback entries: {str(e)}")
 
 # --- Temporary File Handling ---
 TEMP_UPLOADS_DIR = "temp_uploads"

@@ -15,7 +15,7 @@
     background: white;
     border-radius: 8px;
     width: 90%;
-    max-width: 600px;
+    max-width: 1000px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
@@ -222,15 +222,63 @@
 @media (max-width: 768px) {
     .admin-dialog {
         width: 95%;
-        margin: 10px;
+        max-width: none;
+        margin: 5px;
+        max-height: 95vh; /* Use more screen space on mobile */
+        height: 95vh; /* Force full height usage */
     }
     
     .admin-dialog-header {
-        padding: 15px;
+        padding: 10px 15px; /* Reduce top/bottom padding on mobile */
     }
     
     .admin-dialog-content {
         padding: 15px;
+        flex: 1; /* Ensure content takes up available space */
+        min-height: 0; /* Allow flexbox to shrink */
+    }
+    
+    .admin-dialog-footer {
+        padding: 10px 15px; /* Reduce footer padding on mobile */
+    }
+    
+    /* Horizontal scrollable tabs for mobile */
+    .admin-dialog-tabs {
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        scrollbar-width: none; /* Hide scrollbar on Firefox */
+        -ms-overflow-style: none; /* Hide scrollbar on IE/Edge */
+        position: relative;
+        padding-bottom: 3px; /* Space for active border */
+    }
+    
+    /* Hide scrollbar on WebKit browsers */
+    .admin-dialog-tabs::-webkit-scrollbar {
+        display: none;
+    }
+    
+    /* Add subtle gradient to indicate scrollability */
+    .admin-dialog-tabs::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 20px;
+        height: 100%;
+        background: linear-gradient(to left, rgba(255, 255, 255, 0.8), transparent);
+        pointer-events: none;
+        z-index: 1;
+    }
+    
+    .tab-btn {
+        flex: none; /* Don't stretch tabs on mobile */
+        min-width: 120px; /* Minimum width for readability */
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        padding: 12px 16px; /* Slightly more padding for touch targets */
     }
     
 .admin-dialog-footer {

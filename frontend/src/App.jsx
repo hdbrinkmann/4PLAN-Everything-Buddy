@@ -31,6 +31,7 @@ import pinselIcon from '../pinsel.png'; // Import the brush icon
 import newDialogIcon from '../trash.png'; // Using trash icon for New Dialog
 import updateKBIcon from '../update_DB.png';
 import knowledgeFieldsIcon from '../brain.png'; // Using brain icon for Knowledge Fields
+import megaphoneIcon from '../megaphone.png'; // Import the megaphone icon for feedback
 // Remove the import and use the GIF from public directory instead
 import goodIcon from '../good.png'; // Import the good icon
 import badIcon from '../bad.png'; // Import the bad icon
@@ -38,12 +39,14 @@ import FavoritesPanel from './FavoritesPanel';
 import HistoryPanel from './HistoryPanel';
 import ConfirmDialog from './ConfirmDialog';
 import AdminDialog from './AdminDialog';
+import FeedbackDialog from './FeedbackDialog';
 import MultiSelectDropdown from './MultiSelectDropdown'; // Import the new component
 import Login from './Login'; // Import the Login component
 import './App.css';
 import './ConfirmDialog.css';
 import './MultiSelectDropdown.css'; // Import the new CSS
 import './AdminDialog.css';
+import './FeedbackDialog.css';
 
 // Dynamic API configuration based on environment
 const isDevelopment = import.meta.env.DEV;
@@ -105,6 +108,7 @@ function MainContent() {
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [isKnowledgeFieldModalOpen, setIsKnowledgeFieldModalOpen] = useState(false);
     const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
+    const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false); // State to hold admin status
     const [features, setFeatures] = useState({}); // State to hold available features
     const [previousFeatures, setPreviousFeatures] = useState({}); // State to track previous features for comparison
@@ -1280,6 +1284,32 @@ function MainContent() {
         setIsSidebarExpanded(prev => !prev);
     };
 
+    const handleFeedbackSubmit = async (feedbackData) => {
+        try {
+            const response = await fetch(`${API_URL}/feedback/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(feedbackData),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to submit feedback');
+            }
+
+            const result = await response.json();
+            setStatus('Feedback submitted successfully');
+            console.log('Feedback submitted:', result);
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+            setStatus(`Error submitting feedback: ${error.message}`);
+            throw error; // Re-throw to let FeedbackDialog handle it
+        }
+    };
+
     const isChatDisabled = !socket || status.includes('Thinking') || status.includes('Updating') || status.includes('Uploading') || isRecording || isProcessingRag || isAwaitingClarification;
 
     // Generate dynamic file accept string based on available features
@@ -1467,10 +1497,36 @@ function MainContent() {
                             ) : null}
                         </div>
                     )}
-                    {accounts && accounts.length > 0 && (
-                        <div className="user-info" onClick={handleLogout} title="Logout">
-                            <img src={logoutIcon} alt="Logout" className="sidebar-action-icon" />
-                            {isSidebarExpanded && <span>Logout</span>}
+                    
+                    {/* Collapsed mode: vertical buttons */}
+                    {!isSidebarExpanded && (
+                        <>
+                            <div className="user-info" onClick={() => setIsFeedbackDialogOpen(true)} title="Feedback">
+                                <img src={megaphoneIcon} alt="Feedback" className="sidebar-action-icon" />
+                            </div>
+                            
+                            {accounts && accounts.length > 0 && (
+                                <div className="user-info" onClick={handleLogout} title="Logout">
+                                    <img src={logoutIcon} alt="Logout" className="sidebar-action-icon" />
+                                </div>
+                            )}
+                        </>
+                    )}
+                    
+                    {/* Expanded mode: horizontal buttons */}
+                    {isSidebarExpanded && (
+                        <div className="user-actions-horizontal">
+                            <div className="user-info user-info-horizontal" onClick={() => setIsFeedbackDialogOpen(true)} title="Feedback">
+                                <img src={megaphoneIcon} alt="Feedback" className="sidebar-action-icon" />
+                                <span>Feedback</span>
+                            </div>
+                            
+                            {accounts && accounts.length > 0 && (
+                                <div className="user-info user-info-horizontal" onClick={handleLogout} title="Logout">
+                                    <img src={logoutIcon} alt="Logout" className="sidebar-action-icon" />
+                                    <span>Logout</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1612,6 +1668,12 @@ function MainContent() {
                     isOpen={isAdminDialogOpen}
                     onClose={() => setIsAdminDialogOpen(false)}
                     accessToken={accessToken}
+                />
+
+                <FeedbackDialog
+                    isOpen={isFeedbackDialogOpen}
+                    onClose={() => setIsFeedbackDialogOpen(false)}
+                    onSubmit={handleFeedbackSubmit}
                 />
 
                 <div className="chat-action-buttons" style={{ bottom: `${inputAreaHeight + 10}px` }}>

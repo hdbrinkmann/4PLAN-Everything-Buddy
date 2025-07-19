@@ -331,6 +331,55 @@ body, html {
   width: auto;
 }
 
+/* --- User Actions Horizontal Layout (Expanded Mode) --- */
+.user-actions-horizontal {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.user-info-horizontal {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: var(--tertiary-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  height: 36px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.user-info-horizontal:hover {
+  background-color: #e4e6eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.user-info-horizontal .sidebar-action-icon {
+  filter: none;
+  width: 16px;
+  height: 16px;
+}
+
+.user-info-horizontal span {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* --- Collapsed Mode User Button Spacing --- */
+.sidebar.collapsed .user-info:not(:last-child) {
+  margin-bottom: 10px;
+}
+
 /* --- Chat Area --- */
 .chat-area {
   flex-grow: 1;

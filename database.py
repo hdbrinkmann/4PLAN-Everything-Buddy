@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.exc import OperationalError, DisconnectionError
@@ -31,7 +31,7 @@ def get_db_with_retry():
         try:
             db = SessionLocal()
             # Test the connection
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             return db
         except (OperationalError, DisconnectionError) as e:
             retry_count += 1
@@ -76,7 +76,7 @@ def test_db_connection():
     try:
         db = get_db_with_retry()
         try:
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             return True, "Database connection OK"
         finally:
             db.close()
@@ -93,6 +93,7 @@ class User(Base):
     login_sessions = relationship("LoginSession", back_populates="user")
     chat_questions = relationship("ChatQuestionLog", back_populates="user")
     faulty_code_logs = relationship("FaultyCodeLog", back_populates="user")
+    feedback_entries = relationship("FeedbackEntry", back_populates="user")
 
 class FavoriteGroup(Base):
     __tablename__ = "favorite_groups"
@@ -167,5 +168,15 @@ class FaultyCodeLog(Base):
     attempt_number = Column(Integer, default=1)  # Which attempt this was in the retry sequence
     
     user = relationship("User", back_populates="faulty_code_logs")
+
+class FeedbackEntry(Base):
+    __tablename__ = "feedback_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    feedback_type = Column(String, nullable=False)  # "Issue", "Idea", "Other"
+    feedback_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="feedback_entries")
 
 Base.metadata.create_all(bind=engine)

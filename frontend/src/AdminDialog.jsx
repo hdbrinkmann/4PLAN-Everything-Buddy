@@ -25,6 +25,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
     const [chatQuestions, setChatQuestions] = useState([]);
     const [userSummary, setUserSummary] = useState([]);
     const [faultyCodeLogs, setFaultyCodeLogs] = useState([]);
+    const [feedbackEntries, setFeedbackEntries] = useState([]);
     const [loadingData, setLoadingData] = useState(false);
     const [exportingData, setExportingData] = useState(false);
     
@@ -40,6 +41,22 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
             loadFeatures();
         }
     }, [isOpen, accessToken]);
+
+    // Auto-scroll active tab into view on mobile
+    useEffect(() => {
+        if (isOpen) {
+            setTimeout(() => {
+                const activeTabButton = document.querySelector('.admin-dialog-tabs .tab-btn.active');
+                if (activeTabButton) {
+                    activeTabButton.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'center'
+                    });
+                }
+            }, 100);
+        }
+    }, [activeTab, isOpen]);
 
     const loadFeatures = async () => {
         setLoading(true);
@@ -292,6 +309,28 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         }
     };
 
+    const loadFeedbackEntries = async () => {
+        if (!accessToken) return;
+        setLoadingData(true);
+        try {
+            const response = await fetch(getApiUrl('feedback_entries'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setFeedbackEntries(data.feedback_entries);
+            } else {
+                console.error('Failed to load feedback entries:', response.status);
+            }
+        } catch (error) {
+            console.error('Error loading feedback entries:', error);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
     // Export functions
     const exportLoginSessions = async () => {
         if (!accessToken) return;
@@ -383,6 +422,38 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
             }
         } catch (error) {
             console.error('Error exporting faulty code logs:', error);
+            alert('Export failed. Please try again.');
+        } finally {
+            setExportingData(false);
+        }
+    };
+
+    const exportFeedbackEntries = async () => {
+        if (!accessToken) return;
+        setExportingData(true);
+        try {
+            const response = await fetch(getApiUrl('export_feedback_entries'), {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'feedback.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Failed to export feedback entries:', response.status);
+                alert('Export failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error exporting feedback entries:', error);
             alert('Export failed. Please try again.');
         } finally {
             setExportingData(false);
@@ -509,6 +580,18 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         };
     };
 
+    const convertFeedbackEntriesToTableFormat = (data) => {
+        return {
+            columns: ['User', 'Time', 'Type', 'Feedback'],
+            data: data.map(entry => [
+                entry.username,
+                formatDate(entry.created_at),
+                entry.feedback_type,
+                entry.feedback_text.length > 200 ? entry.feedback_text.substring(0, 200) + '...' : entry.feedback_text
+            ])
+        };
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -580,6 +663,15 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                         }}
                     >
                         Faulty Code
+                    </button>
+                    <button 
+                        className={`tab-btn ${activeTab === 'feedback' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveTab('feedback');
+                            loadFeedbackEntries();
+                        }}
+                    >
+                        Feedback
                     </button>
                 </div>
 
@@ -811,6 +903,20 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             )}
                         </div>
                     )}
+
+                    {activeTab === 'feedback' && (
+                        <div className="feedback-tab">
+                            {loadingData ? (
+                                <div className="loading">Loading feedback entries...</div>
+                            ) : feedbackEntries.length === 0 ? (
+                                <p className="no-data">No feedback entries available</p>
+                            ) : (
+                                <CollapsibleTable 
+                                    data={convertFeedbackEntriesToTableFormat(feedbackEntries)} 
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="admin-dialog-footer">
@@ -842,7 +948,7 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             </button>
                         </>
                     )}
-                    {(activeTab === 'user_summary' || activeTab === 'login_sessions' || activeTab === 'chat_questions' || activeTab === 'faulty_code') && (
+                    {(activeTab === 'user_summary' || activeTab === 'login_sessions' || activeTab === 'chat_questions' || activeTab === 'faulty_code' || activeTab === 'feedback') && (
                         <>
                             {activeTab === 'login_sessions' && (
                                 <button 
@@ -866,6 +972,15 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                                 <button 
                                     className="export-btn" 
                                     onClick={exportFaultyCodeLogs}
+                                    disabled={exportingData}
+                                >
+                                    {exportingData ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            )}
+                            {activeTab === 'feedback' && (
+                                <button 
+                                    className="export-btn" 
+                                    onClick={exportFeedbackEntries}
                                     disabled={exportingData}
                                 >
                                     {exportingData ? 'Exporting...' : 'Export Excel'}
