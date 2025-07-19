@@ -658,6 +658,24 @@ RUN pip install -r requirements.txt
 COPY --from=frontend-build /app/dist ./frontend/dist
 ```
 
+**Docker Compose Override Pattern**:
+
+The project uses Docker Compose override files for clean environment separation:
+
+```bash
+# Development (automatic override)
+docker compose up -d
+# Uses: docker-compose.yml + docker-compose.override.yml
+
+# Production (explicit override)  
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+**Key Differences**:
+- **Development**: Port 443:443, development build
+- **Production**: Port 8443:443 (for reverse proxy), production build
+- **Both environments**: Use Docker volumes, init container, auto-SSL generation
+
 **Resource Limits**:
 ```yaml
 # Docker Compose resource optimization
@@ -666,26 +684,23 @@ memswap_limit: 16g
 cpus: '4.0'
 ```
 
-**Volume Mounts**:
+**Volume Management**:
 ```yaml
+# Both environments use managed Docker volumes (no permission issues)
 volumes:
-  - ./ssl:/app/ssl
-  - ./.env:/app/.env:ro
-  - ./Documents:/app/Documents:ro
-  - ./vector_store:/app/vector_store
-  - ./favorites.db:/app/favorites.db
-  - ./admins.json:/app/admins.json
-  - ./features.json:/app/features.json
-  - ./knowledge_fields.json:/app/knowledge_fields.json
+  ssl_data:        # Auto-generated SSL certificates
+  vector_data:     # FAISS vector stores
+  db_data:         # SQLite database
+  config_data:     # Configuration files
 ```
 
 **Environment Setup**:
 ```bash
 # Development
-python main.py  # HTTPS on port 8443
+docker compose up -d                # Port 443, development build
 
-# Production (Docker)  
-uvicorn api:app --host 0.0.0.0 --port 443 --ssl-keyfile=ssl/key.pem --ssl-certfile=ssl/cert.pem
+# Production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d  # Port 8443, production build
 ```
 
 ### SSL Configuration

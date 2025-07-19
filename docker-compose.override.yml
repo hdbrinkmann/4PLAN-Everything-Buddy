@@ -1,0 +1,19 @@
+# Development overrides (automatically loaded with docker-compose.yml)
+# This file is loaded automatically when running: docker-compose up
+
+services:
+  app:
+    build:
+      args:
+        VITE_TENANT_ID: ${VITE_TENANT_ID}
+        VITE_CLIENT_ID: ${VITE_CLIENT_ID}
+        BUILD_MODE: development  # Development build (default)
+    # Port 443:443 for direct development access (already in base)
+    # No BASE_PATH needed for development (already handled in base)
+
+  init:
+    build:
+      args:
+        VITE_TENANT_ID: ${VITE_TENANT_ID}
+        VITE_CLIENT_ID: ${VITE_CLIENT_ID}
+        BUILD_MODE: development
