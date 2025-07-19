@@ -33,3 +33,4 @@ PyMuPDF
 pdfplumber
 python-multipart
 pytz
+schedule

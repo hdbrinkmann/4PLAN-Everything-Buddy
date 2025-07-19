@@ -71,3 +71,6 @@ vector_store/
 # Log files
 *.log
 logs/
+
+# Backup directory (should not be committed due to large files)
+backups/

@@ -633,3 +633,451 @@
     background: #6c757d;
     cursor: not-allowed;
 }
+
+/* Backup management styles */
+.backups-tab {
+    padding: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.backup-config-section,
+.backup-status-section,
+.backup-management-section,
+.backup-history-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.backup-config-section h4,
+.backup-status-section h4,
+.backup-management-section h4,
+.backup-history-section h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.backup-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.config-item label {
+    font-weight: 500;
+    color: #555;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.config-item input[type="time"],
+.config-item input[type="number"] {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.config-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #007bff;
+}
+
+.save-backup-config-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.save-backup-config-btn:hover:not(:disabled) {
+    background: #0056b3;
+}
+
+.save-backup-config-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.status-label {
+    font-weight: 500;
+    color: #555;
+}
+
+.status-value {
+    font-weight: 600;
+    color: #333;
+    text-align: right;
+}
+
+.success-indicator {
+    color: #28a745;
+}
+
+.error-indicator {
+    color: #dc3545;
+}
+
+.manual-backup-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.backup-description-input {
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.backup-description-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.create-backup-btn,
+.cleanup-backups-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.create-backup-btn {
+    background: #28a745;
+    color: white;
+}
+
+.create-backup-btn:hover:not(:disabled) {
+    background: #218838;
+}
+
+.create-backup-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.cleanup-backups-btn {
+    background: #ffc107;
+    color: #212529;
+}
+
+.cleanup-backups-btn:hover {
+    background: #e0a800;
+}
+
+.backup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.backup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    transition: box-shadow 0.2s;
+}
+
+.backup-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.backup-info {
+    flex: 1;
+}
+
+.backup-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.backup-details {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #666;
+}
+
+.backup-type,
+.backup-size,
+.backup-date {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.backup-type {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.backup-size {
+    background: #d4edda;
+    color: #155724;
+}
+
+.backup-date {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.backup-description {
+    color: #666;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.backup-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.restore-backup-btn,
+.delete-backup-btn {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.restore-backup-btn img,
+.delete-backup-btn img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.restore-backup-btn {
+    border: 1px solid #007bff;
+}
+
+.restore-backup-btn:hover {
+    background: #f0f8ff;
+    transform: scale(1.05);
+}
+
+.delete-backup-btn {
+    border: 1px solid #dc3545;
+}
+
+.delete-backup-btn:hover {
+    background: #fff5f5;
+    transform: scale(1.05);
+}
+
+/* Restore Dialog Styles */
+.restore-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 50000 !important;
+}
+
+.restore-dialog {
+    z-index: 50001 !important;
+    max-width: 600px;
+    width: 90vw;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.restore-warning {
+    text-align: left;
+}
+
+.restore-warning h4 {
+    color: #dc3545;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 1.4em;
+}
+
+.backup-info-display {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 15px 0;
+    border-left: 4px solid #007bff;
+}
+
+.backup-info-display p {
+    margin: 5px 0;
+}
+
+.restore-consequences {
+    background: #fff3cd;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 15px 0;
+    border-left: 4px solid #ffc107;
+}
+
+.restore-consequences p {
+    color: #856404;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.restore-consequences ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.restore-consequences li {
+    margin: 5px 0;
+    color: #856404;
+}
+
+.confirmation-input {
+    margin: 20px 0;
+}
+
+.confirmation-input label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #dc3545;
+}
+
+.restore-confirm-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #dc3545;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    background: #fff;
+    box-sizing: border-box; /* Ensures border is included in width calculation */
+}
+
+.restore-confirm-input:focus {
+    outline: none;
+    border-color: #c82333;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.25);
+}
+
+.restore-footer {
+    border-top: 2px solid #dc3545;
+    padding-top: 15px;
+}
+
+.restore-confirm-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.restore-confirm-btn:enabled:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+}
+
+.restore-confirm-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.delete-backup-btn:hover {
+    background: #c82333;
+}
+
+@media (max-width: 768px) {
+    .backup-config-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .status-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .backup-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .backup-actions {
+        align-self: flex-end;
+    }
+    
+    .backup-details {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .manual-backup-controls {
+        gap: 10px;
+    }
+}

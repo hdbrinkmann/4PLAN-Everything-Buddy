@@ -4,6 +4,7 @@ import os
 import shutil
 import logging
 from dotenv import load_dotenv
+from backup_scheduler import initialize_scheduler
 
 load_dotenv()
 
@@ -42,6 +43,16 @@ if __name__ == "__main__":
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     clear_temp_uploads()
+    
+    # Initialize the backup scheduler
+    print("Initializing backup scheduler...")
+    try:
+        initialize_scheduler()
+        print("Backup scheduler initialized successfully")
+    except Exception as e:
+        print(f"Error initializing backup scheduler: {e}")
+        print("Continuing without backup scheduler...")
+    
     """
     This is the main entry point for the backend server.
     It starts the Uvicorn server with the FastAPI application instance from api.py.

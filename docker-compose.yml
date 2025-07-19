@@ -25,12 +25,18 @@ services:
       - db_data:/app/db_volume
       # Configuration files - persistent
       - config_data:/app/config_volume
+      # Docker socket for backup system
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Backup storage - local bind mount for easy access
+      - ./backups:/app/backups
     environment:
       - PYTHONPATH=/app
       - FRONTEND_PATH=/app/frontend/dist
       # Tell the app where to find persistent data
       - DB_PATH=/app/db_volume/favorites.db
       - CONFIG_PATH=/app/config_volume
+      # Set timezone to match host system
+      - TZ=Europe/Berlin
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]
@@ -46,6 +52,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - TZ=Europe/Berlin
     volumes:
       - ssl_data:/app/ssl
       - vector_data:/app/vector_store
@@ -86,6 +94,9 @@ services:
         
         # Config files
         mkdir -p /app/config_volume
+        
+        # Backup directory (for bind mount)
+        mkdir -p /app/backups
         
         # Copy admins.json
         if [ ! -f /app/config_volume/admins.json ]; then

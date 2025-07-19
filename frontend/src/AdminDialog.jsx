@@ -34,6 +34,28 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
     const [loadingKnowledgeFields, setLoadingKnowledgeFields] = useState(false);
     const [savingKnowledgeFields, setSavingKnowledgeFields] = useState(false);
     
+    // Backup management states
+    const [backupStatus, setBackupStatus] = useState({});
+    const [backupConfig, setBackupConfig] = useState({
+        enabled: true,
+        backup_time: '02:00',
+        retention_days: 7,
+        retention_months: 12,
+        compress: true,
+        verify_integrity: true
+    });
+    const [backupList, setBackupList] = useState([]);
+    const [loadingBackupData, setLoadingBackupData] = useState(false);
+    const [savingBackupConfig, setSavingBackupConfig] = useState(false);
+    const [creatingBackup, setCreatingBackup] = useState(false);
+    const [manualBackupDescription, setManualBackupDescription] = useState('');
+    
+    // Restore states
+    const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+    const [restoreConfirmText, setRestoreConfirmText] = useState('');
+    const [selectedBackup, setSelectedBackup] = useState(null);
+    const [restoringBackup, setRestoringBackup] = useState(false);
+    
     // These states are no longer needed since CollapsibleTable handles filtering internally
 
     useEffect(() => {
@@ -460,6 +482,247 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
         }
     };
 
+    // Backup management functions
+    const loadBackupData = async () => {
+        if (!accessToken) return;
+        setLoadingBackupData(true);
+        try {
+            // Load backup status
+            const statusResponse = await fetch(getApiUrl('backups/status'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (statusResponse.ok) {
+                const statusData = await statusResponse.json();
+                setBackupStatus(statusData);
+            }
+
+            // Load backup config
+            const configResponse = await fetch(getApiUrl('backups/config'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                setBackupConfig(configData);
+            }
+
+            // Load backup list
+            const listResponse = await fetch(getApiUrl('backups/list'), {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (listResponse.ok) {
+                const listData = await listResponse.json();
+                setBackupList(listData.backups);
+            }
+        } catch (error) {
+            console.error('Error loading backup data:', error);
+        } finally {
+            setLoadingBackupData(false);
+        }
+    };
+
+    const saveBackupConfig = async () => {
+        if (!accessToken) return;
+        setSavingBackupConfig(true);
+        try {
+            const response = await fetch(getApiUrl('backups/config'), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(backupConfig),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                alert('Backup configuration saved successfully!');
+                // Reload backup data to reflect changes
+                loadBackupData();
+            } else {
+                const errorData = await response.json();
+                alert('Failed to save backup configuration: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error saving backup config:', error);
+            alert('Error saving backup config: ' + error.message);
+        } finally {
+            setSavingBackupConfig(false);
+        }
+    };
+
+    const createManualBackup = async () => {
+        if (!accessToken) return;
+        setCreatingBackup(true);
+        try {
+            const response = await fetch(getApiUrl('backups/create'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ description: manualBackupDescription }),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                alert('Backup created successfully!');
+                setManualBackupDescription('');
+                // Reload backup data to show new backup
+                loadBackupData();
+            } else {
+                const errorData = await response.json();
+                alert('Failed to create backup: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error creating backup:', error);
+            alert('Error creating backup: ' + error.message);
+        } finally {
+            setCreatingBackup(false);
+        }
+    };
+
+    const deleteBackup = async (backupName) => {
+        if (!accessToken) return;
+        if (!confirm(`Are you sure you want to delete backup "${backupName}"?`)) return;
+        
+        try {
+            const response = await fetch(getApiUrl(`backups/${backupName}`), {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                alert('Backup deleted successfully!');
+                // Reload backup data to reflect changes
+                loadBackupData();
+            } else {
+                const errorData = await response.json();
+                alert('Failed to delete backup: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error deleting backup:', error);
+            alert('Error deleting backup: ' + error.message);
+        }
+    };
+
+    const cleanupBackups = async () => {
+        if (!accessToken) return;
+        if (!confirm('This will remove old backups according to your retention policy. Continue?')) return;
+        
+        try {
+            const response = await fetch(getApiUrl('backups/cleanup'), {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    alert(`Cleanup completed! Deleted ${data.deleted_count} old backups, ${data.remaining_count} backups remaining.`);
+                } else {
+                    alert('Cleanup failed: ' + (data.error || 'Unknown error'));
+                }
+                // Reload backup data to reflect changes
+                loadBackupData();
+            } else {
+                const errorData = await response.json();
+                alert('Failed to cleanup backups: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error cleaning up backups:', error);
+            alert('Error cleaning up backups: ' + error.message);
+        }
+    };
+
+    const handleBackupConfigChange = (field, value) => {
+        setBackupConfig(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    // Restore functions
+    const initiateRestore = (backup) => {
+        setSelectedBackup(backup);
+        setRestoreDialogOpen(true);
+        setRestoreConfirmText('');
+    };
+
+    const executeRestore = async () => {
+        if (!accessToken || !selectedBackup) return;
+        if (restoreConfirmText !== 'RESTORE') {
+            alert('Please type "RESTORE" to confirm the restore operation.');
+            return;
+        }
+
+        setRestoringBackup(true);
+        try {
+            const response = await fetch(getApiUrl('backups/restore'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    backup_name: selectedBackup.name,
+                    confirm_text: restoreConfirmText
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                alert('⚠️ Backup restore initiated! The system will restart automatically. You may lose connection temporarily.');
+                setRestoreDialogOpen(false);
+                setSelectedBackup(null);
+                setRestoreConfirmText('');
+                
+                // Close admin dialog as system will restart
+                setTimeout(() => {
+                    onClose();
+                }, 2000);
+            } else {
+                const errorData = await response.json();
+                alert('Failed to restore backup: ' + (errorData.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error restoring backup:', error);
+            alert('Error restoring backup: ' + error.message);
+        } finally {
+            setRestoringBackup(false);
+        }
+    };
+
+    // Helper function to format backup size
+    const formatSize = (bytes) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    // Helper function to convert backup list to table format
+    const convertBackupListToTableFormat = (data) => {
+        return {
+            columns: ['Name', 'Type', 'Size', 'Date', 'Description', 'Actions'],
+            data: data.map(backup => [
+                backup.name,
+                backup.type,
+                formatSize(backup.size || 0),
+                formatDate(backup.date),
+                backup.description || 'No description',
+                backup.name // Will be used for actions
+            ])
+        };
+    };
+
     // Data cleanup function
     const cleanupOldData = () => {
         setConfirmTitle('Delete Old Data');
@@ -604,6 +867,72 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
             >
                 <p>{confirmMessage || "This process can take a very long time and will update the entire knowledge base. Do you really want to start the process?"}</p>
             </ConfirmDialog>
+
+            {/* Restore Confirmation Dialog */}
+            {restoreDialogOpen && (
+                <div className="restore-dialog-overlay" onClick={() => setRestoreDialogOpen(false)}>
+                    <div className="restore-dialog" onClick={e => e.stopPropagation()}>
+                        <div className="admin-dialog-header">
+                            <h3>⚠️ RESTORE BACKUP</h3>
+                            <button className="close-btn" onClick={() => setRestoreDialogOpen(false)}>×</button>
+                        </div>
+                        
+                        <div className="admin-dialog-content">
+                            <div className="restore-warning">
+                                <h4>ACHTUNG: DATENVERLUST MÖGLICH!</h4>
+                                
+                                <div className="backup-info-display">
+                                    <p><strong>Backup wiederherstellen:</strong> {selectedBackup?.name}</p>
+                                    <p><strong>Erstellt:</strong> {selectedBackup && formatDate(selectedBackup.date)} ({formatSize(selectedBackup?.size || 0)})</p>
+                                    <p><strong>Beschreibung:</strong> "{selectedBackup?.description || 'No description'}"</p>
+                                </div>
+
+                                <div className="restore-consequences">
+                                    <p><strong>ALLE AKTUELLEN DATEN WERDEN ÜBERSCHRIEBEN!</strong></p>
+                                    <ul>
+                                        <li>✋ Datenbank wird zurückgesetzt</li>
+                                        <li>🔄 Alle Docker Images werden ersetzt</li>
+                                        <li>⚙️ Konfiguration wird zurückgesetzt</li>
+                                        <li>🔄 System wird automatisch neu gestartet</li>
+                                    </ul>
+                                </div>
+
+                                <div className="confirmation-input">
+                                    <label htmlFor="restoreConfirm">
+                                        <strong>Bestätigung: Tippen Sie "RESTORE" ein:</strong>
+                                    </label>
+                                    <input
+                                        id="restoreConfirm"
+                                        type="text"
+                                        value={restoreConfirmText}
+                                        onChange={(e) => setRestoreConfirmText(e.target.value)}
+                                        placeholder="RESTORE"
+                                        className="restore-confirm-input"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="admin-dialog-footer restore-footer">
+                            <button 
+                                className="cancel-btn" 
+                                onClick={() => setRestoreDialogOpen(false)}
+                                disabled={restoringBackup}
+                            >
+                                ❌ Abbrechen
+                            </button>
+                            <button 
+                                className="restore-confirm-btn"
+                                onClick={executeRestore}
+                                disabled={restoringBackup || restoreConfirmText !== 'RESTORE'}
+                            >
+                                {restoringBackup ? '🔄 Wiederherstellen...' : '⚠️ BACKUP WIEDERHERSTELLEN'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             <div className="admin-dialog-overlay" onClick={onClose}>
             <div className="admin-dialog" onClick={e => e.stopPropagation()}>
@@ -672,6 +1001,15 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                         }}
                     >
                         Feedback
+                    </button>
+                    <button 
+                        className={`tab-btn ${activeTab === 'backups' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveTab('backups');
+                            loadBackupData();
+                        }}
+                    >
+                        Backups
                     </button>
                 </div>
 
@@ -917,6 +1255,185 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             )}
                         </div>
                     )}
+
+                    {activeTab === 'backups' && (
+                        <div className="backups-tab">
+                            {loadingBackupData ? (
+                                <div className="loading">Loading backup data...</div>
+                            ) : (
+                                <>
+                                    <div className="backup-config-section">
+                                        <h4>🔧 Backup Configuration</h4>
+                                        <div className="backup-config-grid">
+                                            <div className="config-item">
+                                                <label>Automatic Backup Time ⏰</label>
+                                                <input
+                                                    type="time"
+                                                    value={backupConfig.backup_time}
+                                                    onChange={(e) => handleBackupConfigChange('backup_time', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="config-item">
+                                                <label>Retention Days 📅</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="30"
+                                                    value={backupConfig.retention_days}
+                                                    onChange={(e) => handleBackupConfigChange('retention_days', parseInt(e.target.value))}
+                                                />
+                                            </div>
+                                            <div className="config-item">
+                                                <label>Retention Months 🗓️</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="24"
+                                                    value={backupConfig.retention_months}
+                                                    onChange={(e) => handleBackupConfigChange('retention_months', parseInt(e.target.value))}
+                                                />
+                                            </div>
+                                            <div className="config-item">
+                                                <label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={backupConfig.enabled}
+                                                        onChange={(e) => handleBackupConfigChange('enabled', e.target.checked)}
+                                                    />
+                                                    Enable Automatic Backups
+                                                </label>
+                                            </div>
+                                            <div className="config-item">
+                                                <label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={backupConfig.compress}
+                                                        onChange={(e) => handleBackupConfigChange('compress', e.target.checked)}
+                                                    />
+                                                    Enable Compression
+                                                </label>
+                                            </div>
+                                            <div className="config-item">
+                                                <label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={backupConfig.verify_integrity}
+                                                        onChange={(e) => handleBackupConfigChange('verify_integrity', e.target.checked)}
+                                                    />
+                                                    Verify Integrity
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            className="save-backup-config-btn"
+                                            onClick={saveBackupConfig}
+                                            disabled={savingBackupConfig}
+                                        >
+                                            {savingBackupConfig ? 'Saving...' : 'Save Configuration'}
+                                        </button>
+                                    </div>
+
+                                    <div className="backup-status-section">
+                                        <h4>📊 Backup Status</h4>
+                                        <div className="status-grid">
+                                            <div className="status-item">
+                                                <span className="status-label">Last Backup:</span>
+                                                <span className="status-value">
+                                                    {backupStatus.last_backup ? formatDate(backupStatus.last_backup) : 'Never'}
+                                                    {backupStatus.last_backup_success === false && <span className="error-indicator"> ❌</span>}
+                                                    {backupStatus.last_backup_success === true && <span className="success-indicator"> ✅</span>}
+                                                </span>
+                                            </div>
+                                            <div className="status-item">
+                                                <span className="status-label">Next Backup:</span>
+                                                <span className="status-value">
+                                                    {backupStatus.next_backup ? formatDate(backupStatus.next_backup) : 'Disabled'}
+                                                </span>
+                                            </div>
+                                            <div className="status-item">
+                                                <span className="status-label">Total Backups:</span>
+                                                <span className="status-value">
+                                                    {backupStatus.total_backups || 0} 
+                                                    (Daily: {backupStatus.daily_backups || 0}, 
+                                                    Monthly: {backupStatus.monthly_backups || 0}, 
+                                                    Manual: {backupStatus.manual_backups || 0})
+                                                </span>
+                                            </div>
+                                            <div className="status-item">
+                                                <span className="status-label">Storage Used:</span>
+                                                <span className="status-value">{backupStatus.total_storage_human || '0 B'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="backup-management-section">
+                                        <h4>📋 Backup Management</h4>
+                                        <div className="manual-backup-controls">
+                                            <input
+                                                type="text"
+                                                placeholder="Enter backup description (optional)"
+                                                value={manualBackupDescription}
+                                                onChange={(e) => setManualBackupDescription(e.target.value)}
+                                                className="backup-description-input"
+                                            />
+                                            <button
+                                                onClick={createManualBackup}
+                                                disabled={creatingBackup}
+                                                className="create-backup-btn"
+                                            >
+                                                {creatingBackup ? 'Creating...' : 'Create Manual Backup'}
+                                            </button>
+                                            <button
+                                                onClick={cleanupBackups}
+                                                className="cleanup-backups-btn"
+                                            >
+                                                Cleanup Old Backups
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="backup-history-section">
+                                        <h4>📋 Backup History</h4>
+                                        {backupList.length === 0 ? (
+                                            <p className="no-data">No backups available</p>
+                                        ) : (
+                                            <div className="backup-list">
+                                                {backupList.map((backup, index) => (
+                                                    <div key={index} className="backup-item">
+                                                        <div className="backup-info">
+                                                            <div className="backup-name">{backup.name}</div>
+                                                            <div className="backup-details">
+                                                                <span className="backup-type">{backup.type}</span>
+                                                                <span className="backup-size">{formatSize(backup.size || 0)}</span>
+                                                                <span className="backup-date">{formatDate(backup.date)}</span>
+                                                            </div>
+                                                            <div className="backup-description">{backup.description || 'No description'}</div>
+                                                        </div>
+                                                        <div className="backup-actions">
+                                                            <button
+                                                                onClick={() => initiateRestore(backup)}
+                                                                className="restore-backup-btn"
+                                                                title="Restore backup"
+                                                            >
+                                                                <img src="/restore.png" alt="Restore" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteBackup(backup.name)}
+                                                                className="delete-backup-btn"
+                                                                title="Delete backup"
+                                                            >
+                                                                <img src="/trash.png" alt="Delete" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="admin-dialog-footer">
@@ -993,6 +1510,13 @@ const AdminDialog = ({ isOpen, onClose, accessToken }) => {
                             >
                                 Delete &gt;1 Year
                             </button>
+                            <button className="cancel-btn" onClick={onClose}>
+                                Close
+                            </button>
+                        </>
+                    )}
+                    {activeTab === 'backups' && (
+                        <>
                             <button className="cancel-btn" onClick={onClose}>
                                 Close
                             </button>

@@ -28,7 +28,7 @@ import wipeIcon from '../wipe.png'; // Import the wipe icon
 import textFileIcon from '../textfile.png'; // Import the new icon
 import docFileIcon from '../docfile.png'; // Import the new icon
 import pinselIcon from '../pinsel.png'; // Import the brush icon
-import newDialogIcon from '../trash.png'; // Using trash icon for New Dialog
+// trash.png and restore.png are now in public directory, so we'll reference them directly in JSX
 import updateKBIcon from '../update_DB.png';
 import knowledgeFieldsIcon from '../brain.png'; // Using brain icon for Knowledge Fields
 import megaphoneIcon from '../megaphone.png'; // Import the megaphone icon for feedback
@@ -1372,7 +1372,7 @@ function MainContent() {
                 )}
                 <div className="sidebar-actions">
                     <button onClick={handleNewDialog} title="New Dialog">
-                        <img src={newDialogIcon} alt="New Dialog" className="sidebar-action-icon" />
+                        <img src="/trash.png" alt="New Dialog" className="sidebar-action-icon" />
                         {isSidebarExpanded && <span className="sidebar-action-text">New Dialog</span>}
                     </button>
                     {isAdmin && (

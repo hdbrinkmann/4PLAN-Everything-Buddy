@@ -740,6 +740,169 @@ openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 3
 └── knowledge_fields.json # Knowledge field definitions
 ```
 
+## Backup System
+
+### Enterprise-Grade Backup Solution
+
+**4PLAN Everything Buddy** includes a comprehensive cross-platform backup system that ensures data protection and business continuity. The system automatically backs up all critical components with intelligent retention policies.
+
+### Components Backed Up
+
+**Complete System Coverage**:
+- 🗄️ **SQLite Database**: All user data, favorites, chat history, and system state
+- 🧠 **Vector Stores**: FAISS indices containing knowledge base embeddings
+- ⚙️ **Configuration Files**: Feature settings, admin lists, knowledge field definitions
+- 🔐 **SSL Certificates**: Auto-generated security certificates
+- 📦 **Docker Images**: Complete application containers for recovery
+
+### Automated Retention Policy
+
+**Smart Historization**:
+- ✅ **7 Days** of daily backups (created at 2:00 AM)
+- ✅ **12 Months** of monthly archives (last day of each month)
+- ✅ **Unlimited** manual backups (retained until manually deleted)
+- 🔄 **Automatic Cleanup**: Intelligent cleanup preserving monthly archives
+
+### Cross-Platform Support
+
+**Universal Compatibility**:
+- **macOS/Linux**: Shell scripts with POSIX compliance
+- **Windows**: Batch scripts with Task Scheduler integration
+- **All Platforms**: Python core for consistent functionality
+
+### Setup & Usage
+
+**Quick Setup**:
+```bash
+# macOS/Linux
+./backup.sh --setup
+
+# Windows
+backup.bat --setup
+```
+
+**Manual Backup Creation**:
+```bash
+# macOS/Linux
+./backup.sh "Pre-update backup"
+
+# Windows  
+backup.bat "Pre-update backup"
+```
+
+**Restore Operations**:
+```bash
+# List available backups
+./restore.sh --list
+
+# Restore with confirmation
+./restore.sh backup_20250119_185322_manual --confirm
+```
+
+**Status Monitoring**:
+```bash
+# Check backup system status
+python3 backup_manager.py status
+
+# View backup history
+python3 backup_manager.py list
+
+# Manual cleanup
+python3 backup_manager.py cleanup
+```
+
+### Backup Structure
+
+**Each backup contains**:
+```
+backups/backup_20250119_185322_manual/
+├── metadata.json          # Backup information & timestamps
+├── images.tar             # Docker container images (~675MB)
+├── db_data.tar.gz         # Complete SQLite database (~5MB)
+├── vector_data.tar.gz     # FAISS vector stores (~50MB)
+├── config_data.tar.gz     # All configuration files (~1MB)
+├── ssl_data.tar.gz        # SSL certificates (~1MB)
+└── checksums.sha256       # Integrity verification hashes
+```
+
+### Enterprise Features
+
+**Data Integrity**:
+- **SHA256 Checksums**: Complete integrity verification
+- **SQLite Checkpoint**: Database consistency during backup
+- **Atomic Operations**: All-or-nothing backup creation
+- **Verification**: Automatic integrity checks during restore
+
+**Automation**:
+- **Scheduled Backups**: Daily automated backups at 2:00 AM
+- **Smart Retention**: Automatic conversion of daily to monthly archives
+- **Pre-deployment**: Integration with CI/CD pipelines
+- **Health Monitoring**: Backup success/failure tracking
+
+**Security**:
+- **Encrypted Transport**: Secure backup operations
+- **Access Control**: User-specific backup permissions
+- **Audit Trail**: Complete backup operation logging
+- **Disaster Recovery**: Full system restoration capability
+
+### Configuration
+
+**Backup Settings** (`backup_config.json`):
+```json
+{
+  "retention_days": 7,        # Daily backup retention period
+  "retention_months": 12,     # Monthly archive retention period  
+  "backup_time": "02:00",     # Scheduled backup time
+  "compress": true,           # Enable compression for space efficiency
+  "verify_integrity": true,   # Perform integrity checks
+  "incremental": false        # Full backups (recommended for reliability)
+}
+```
+
+**Docker Volume Management**:
+```yaml
+# Automatic volume backup without permission issues
+volumes:
+  db_data: {}           # Database files
+  vector_data: {}       # FAISS vector stores
+  config_data: {}       # Configuration files
+  ssl_data: {}          # SSL certificates
+```
+
+### Disaster Recovery
+
+**Complete System Recovery**:
+1. **Fresh Installation**: Deploy 4PLAN Everything Buddy
+2. **Backup Restoration**: Restore from latest backup
+3. **Service Verification**: Confirm all systems operational
+4. **Data Validation**: Verify data integrity and functionality
+
+**Recovery Time Objectives**:
+- **Backup Creation**: 30-60 seconds (depending on data size)
+- **Full Restoration**: 2-5 minutes (automated process)
+- **Service Resume**: Immediate after restoration completion
+
+### Monitoring & Maintenance
+
+**Backup Monitoring**:
+```bash
+# View backup statistics
+Total backups: 15
+Daily: 7, Monthly: 6, Manual: 2  
+Total size: 2.3 GB
+
+# Check last backup status
+python3 backup_manager.py status
+```
+
+**Automated Maintenance**:
+- **Daily Cleanup**: Removes backups older than retention period
+- **Monthly Archiving**: Converts end-of-month backups to permanent archives
+- **Storage Management**: Maintains optimal disk space usage
+- **Health Checks**: Verifies backup system functionality
+
+For detailed usage instructions, troubleshooting, and best practices, see the comprehensive [**BACKUP_SYSTEM_GUIDE.md**](./BACKUP_SYSTEM_GUIDE.md).
+
 ## Configuration
 
 ### Environment Variables

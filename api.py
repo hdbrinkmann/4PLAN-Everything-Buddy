@@ -30,6 +30,8 @@ from config import (
     load_admins_config, load_features_config, load_knowledge_fields_config,
     save_admins_config, save_features_config, save_knowledge_fields_config
 )
+from backup_scheduler import get_scheduler
+import security
 
 # --- App Initialization ---
 # Define allowed origins for CORS
@@ -165,6 +167,17 @@ class QuestionRating(BaseModel):
 class FeedbackCreate(BaseModel):
     feedback_type: str  # 'Issue', 'Idea', 'Other'
     feedback_text: str
+
+class BackupConfig(BaseModel):
+    enabled: bool
+    backup_time: str
+    retention_days: int
+    retention_months: int
+    compress: bool
+    verify_integrity: bool
+
+class BackupCreate(BaseModel):
+    description: str = ""
 
 @fastapi_app.get("/favorites/")
 async def get_favorites(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -942,6 +955,155 @@ async def export_feedback_entries(db: Session = Depends(get_db), user: User = De
         print(f"Excel export error: {e}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error exporting feedback entries: {str(e)}")
+
+# --- Backup Management Endpoints ---
+@fastapi_app.get("/admin/backups/status")
+async def get_backup_status(user: User = Depends(get_current_user)):
+    """Gets the current backup system status (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        return scheduler.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting backup status: {str(e)}")
+
+@fastapi_app.get("/admin/backups/config")
+async def get_backup_config(user: User = Depends(get_current_user)):
+    """Gets the current backup configuration (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        config = scheduler.config
+        return {
+            "enabled": config.get("enabled", True),
+            "backup_time": config.get("backup_time", "02:00"),
+            "retention_days": config.get("retention_days", 7),
+            "retention_months": config.get("retention_months", 12),
+            "compress": config.get("compress", True),
+            "verify_integrity": config.get("verify_integrity", True)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting backup config: {str(e)}")
+
+@fastapi_app.put("/admin/backups/config")
+async def update_backup_config(config: BackupConfig, user: User = Depends(get_current_user)):
+    """Updates the backup configuration (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        success = scheduler.update_config({
+            "enabled": config.enabled,
+            "backup_time": config.backup_time,
+            "retention_days": config.retention_days,
+            "retention_months": config.retention_months,
+            "compress": config.compress,
+            "verify_integrity": config.verify_integrity
+        })
+        
+        if success:
+            return {"status": "success", "message": "Backup configuration updated"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update backup configuration")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating backup config: {str(e)}")
+
+@fastapi_app.get("/admin/backups/list")
+async def list_backups(user: User = Depends(get_current_user)):
+    """Gets list of all backups (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        return {"backups": scheduler.get_backup_list()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing backups: {str(e)}")
+
+@fastapi_app.post("/admin/backups/create")
+async def create_backup(backup: BackupCreate, user: User = Depends(get_current_user)):
+    """Creates a manual backup (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        success = scheduler.create_manual_backup(backup.description)
+        
+        if success:
+            return {"status": "success", "message": "Backup created successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create backup")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating backup: {str(e)}")
+
+@fastapi_app.delete("/admin/backups/{backup_name}")
+async def delete_backup(backup_name: str, user: User = Depends(get_current_user)):
+    """Deletes a specific backup (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        success = scheduler.delete_backup(backup_name)
+        
+        if success:
+            return {"status": "success", "message": f"Backup {backup_name} deleted"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete backup")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting backup: {str(e)}")
+
+@fastapi_app.post("/admin/backups/cleanup")
+async def cleanup_backups(user: User = Depends(get_current_user)):
+    """Manually triggers backup cleanup (admin only)."""
+    check_admin_access(user)
+    
+    try:
+        scheduler = get_scheduler()
+        result = scheduler.cleanup_old_backups()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during backup cleanup: {str(e)}")
+
+from fastapi import Body
+
+@fastapi_app.post("/admin/backups/restore")
+async def restore_backup(restore_data: dict = Body(...), user: User = Depends(get_current_user)):
+    """Restores a backup (admin only)."""
+    try:
+        # Check admin access using the standard pattern
+        check_admin_access(user)
+        
+        backup_name = restore_data.get("backup_name")
+        confirm_text = restore_data.get("confirm_text", "")
+        
+        if not backup_name:
+            raise HTTPException(status_code=400, detail="Backup name is required")
+        
+        if confirm_text != "RESTORE":
+            raise HTTPException(status_code=400, detail="Confirmation text must be 'RESTORE'")
+        
+        logging.info(f"Restoring backup: {backup_name}")
+        
+        # Use backup manager directly
+        from backup_manager import BackupManager
+        manager = BackupManager()
+        
+        success = manager.restore_backup(backup_name, confirm=True)
+        
+        if success:
+            return {"success": True, "message": "Backup restored successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to restore backup")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Backup restore failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to restore backup")
 
 # --- Temporary File Handling ---
 TEMP_UPLOADS_DIR = "temp_uploads"

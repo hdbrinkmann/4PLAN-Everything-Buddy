@@ -16,6 +16,19 @@ services:
       # Remove BASE_PATH since no sub-path needed
       - DB_PATH=/app/db_volume/favorites.db
       - CONFIG_PATH=/app/config_volume
+      # Set timezone to match host system
+      - TZ=Europe/Berlin
+    volumes:
+      # Override backup volume to use named volume in production (more secure)
+      - backup_data:/app/backups
+      # Keep all other volumes from base config
+      - ssl_data:/app/ssl
+      - ./.env:/app/.env:ro
+      - ./Documents:/app/Documents:ro
+      - vector_data:/app/vector_store
+      - db_data:/app/db_volume
+      - config_data:/app/config_volume
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:443/"]  # No sub-path
       interval: 30s
@@ -30,4 +43,6 @@ services:
         VITE_CLIENT_ID: ${VITE_CLIENT_ID}
         BUILD_MODE: production
 
-# Volumes remain the same - using Docker managed volumes is better than bind mounts
+volumes:
+  backup_data:
+    driver: local
