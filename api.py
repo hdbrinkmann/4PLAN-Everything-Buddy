@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 from app_logic import AppLogic
 from auth import verify_token, get_current_user
-from database import SessionLocal, User, LoginSession, ChatQuestionLog, FaultyCodeLog
+from database import SessionLocal, User, LoginSession, ChatQuestionLog, FaultyCodeLog, get_db_with_retry, test_db_connection
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from pydantic import BaseModel
@@ -100,12 +100,16 @@ async def auth_middleware(request: Request, call_next):
             content={"detail": e.detail}
         )
 
-# Configure Socket.IO with sub-path support
+# Configure Socket.IO with sub-path support and reconnection settings
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=origins,
-    ping_timeout=120,  # Increased timeout to 120 seconds
-    ping_interval=60   # Increased interval to 60 seconds
+    ping_timeout=60,   # Timeout for ping response
+    ping_interval=25,  # Interval between pings
+    max_http_buffer_size=10000000,  # 10MB buffer for large uploads
+    transports=['websocket', 'polling'],  # Allow both transports for better compatibility
+    engineio_logger=False,  # Disable verbose logging
+    logger=False  # Disable verbose logging
 )
 
 # Socket.IO should always run on /socket.io/ within the container
@@ -115,7 +119,8 @@ app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 logic = AppLogic()
 
 def get_db():
-    db = SessionLocal()
+    """Get database session with automatic retry on connection failure."""
+    db = get_db_with_retry()
     try:
         yield db
     finally:
@@ -220,6 +225,35 @@ async def get_knowledge_fields(user: User = Depends(get_current_user)):
         return {"fields": accessible_fields}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/health")
+async def health_check():
+    """Health check endpoint that includes database connection status."""
+    try:
+        # Test database connection
+        db_status, db_message = test_db_connection()
+        
+        health_status = {
+            "status": "healthy" if db_status else "unhealthy",
+            "database": {
+                "status": "connected" if db_status else "disconnected",
+                "message": db_message
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        status_code = 200 if db_status else 503
+        return JSONResponse(content=health_status, status_code=status_code)
+        
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            status_code=503
+        )
 
 @fastapi_app.get("/check_admin")
 async def check_admin(user: User = Depends(get_current_user)):

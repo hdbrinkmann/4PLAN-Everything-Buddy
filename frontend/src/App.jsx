@@ -295,25 +295,52 @@ function MainContent() {
                 newSocket.on('connect', () => setStatus('Connected'));
                 newSocket.on('connect_error', (err) => setStatus(`Connection Failed: ${err.message}`));
                 newSocket.on('disconnect', (reason) => {
+                    console.log('Socket disconnected:', reason);
                     setStatus(`Disconnected: ${reason}`);
-                    let userMessage = '';
-                    if (reason === 'io server disconnect') {
-                        userMessage = "The server has disconnected the session. This might be due to a server restart or an intentional shutdown.";
-                    } else if (reason === 'transport close') {
-                        userMessage = "The connection was lost unexpectedly. Please check your internet connection. The server might also be temporarily unavailable or has been restarted.";
-                    } else if (reason === 'ping timeout') {
-                        userMessage = "The connection to the server was lost (ping timeout). The server may be overloaded or taking too long to respond. Please try your request again.";
+                    
+                    // Don't show error messages for intentional disconnects or client-side disconnects
+                    if (reason === 'io client disconnect') {
+                        return; // User initiated disconnect, don't show error
                     }
+                    
+                    // For unexpected disconnects, the socket will automatically try to reconnect
+                    // We'll handle the reconnection in the 'connect' event
+                });
 
-                    if (userMessage) {
-                        const errorMessage = {
-                            role: 'assistant',
-                            content: userMessage,
-                            isComplete: true,
-                            isError: true,
-                        };
-                        setMessages(prev => [...prev, errorMessage]);
-                    }
+                newSocket.on('connect_error', (error) => {
+                    console.log('Connection error:', error);
+                    setStatus(`Connection error: ${error.message}`);
+                });
+
+                newSocket.on('reconnect', (attemptNumber) => {
+                    console.log('Reconnected after', attemptNumber, 'attempts');
+                    setStatus('Reconnected successfully');
+                    
+                    // Clear any error messages from previous disconnection
+                    setMessages(prev => prev.filter(msg => !msg.isError || msg.role !== 'assistant'));
+                });
+
+                newSocket.on('reconnect_attempt', (attemptNumber) => {
+                    console.log('Reconnection attempt', attemptNumber);
+                    setStatus(`Reconnecting... (attempt ${attemptNumber})`);
+                });
+
+                newSocket.on('reconnect_error', (error) => {
+                    console.log('Reconnection error:', error);
+                    setStatus(`Reconnection failed: ${error.message}`);
+                });
+
+                newSocket.on('reconnect_failed', () => {
+                    console.log('Reconnection failed after all attempts');
+                    setStatus('Connection failed. Please refresh the page.');
+                    
+                    const errorMessage = {
+                        role: 'assistant',
+                        content: "Connection to the server could not be re-established. Please refresh the page to continue.",
+                        isComplete: true,
+                        isError: true,
+                    };
+                    setMessages(prev => [...prev, errorMessage]);
                 });
 
                 newSocket.on('status', (data) => setStatus(data.message));
