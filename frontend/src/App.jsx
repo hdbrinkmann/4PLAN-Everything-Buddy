@@ -685,6 +685,10 @@ function MainContent() {
             setStatus('Thinking...');
 
             setInputValue('');
+            // Reset textarea height after clearing input
+            if (textareaRef.current) {
+                textareaRef.current.style.height = '48px';
+            }
             setIsThinking(true);
             setIsGenerating(true);
             setIsCancelling(false); // Reset cancelling state

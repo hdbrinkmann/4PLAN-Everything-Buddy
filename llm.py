@@ -1983,35 +1983,41 @@ Respond with ONLY the JSON object, nothing else.
 def extract_context_keywords(client, conversation_history: list) -> list[str]:
     """
     Extracts relevant keywords and entities from previous assistant responses for context-aware search.
+    OPTIMIZED: Uses fast model and limits conversation history for better performance.
     """
-    system_prompt = """You are a keyword extraction specialist. Your task is to extract the most relevant keywords and entities from the ASSISTANT'S PREVIOUS RESPONSES that are relevant to the user's LATEST QUESTION.
+    # PERFORMANCE OPTIMIZATION: Only use last 4 messages to reduce processing time
+    recent_history = conversation_history[-4:] if len(conversation_history) > 4 else conversation_history
+    
+    # PERFORMANCE OPTIMIZATION: Skip if conversation is too short to have meaningful context
+    if len(recent_history) < 2:
+        return []
+    
+    system_prompt = """You are a fast keyword extraction specialist. Extract 3-5 key terms from the ASSISTANT'S PREVIOUS RESPONSES that are relevant to the user's LATEST QUESTION.
 
-**Instructions:**
+**Quick Instructions:**
 1. Read the user's latest question
-2. Look at all previous assistant responses in the conversation
-3. Extract 3-7 key terms that provide context for the user's question
-4. Focus on: locations, entities, technical terms, topics, specific subjects mentioned by the assistant
-5. Prioritize terms that help make the user's question more specific and contextual
+2. Look at previous assistant responses 
+3. Extract 3-5 key terms: locations, entities, technical terms, topics
+4. Return ONLY a comma-separated list, nothing else
 
 **Examples:**
-- If user asks "Should I bring an umbrella?" after assistant mentioned "Miami weather tomorrow will be rainy"
-  → Extract: ["Miami", "weather", "rain", "tomorrow"]
-- If user asks "Is that legal?" after assistant discussed "German employment law"
-  → Extract: ["German", "employment law", "legal"]
+- User asks "Should I bring an umbrella?" after assistant mentioned "Miami weather rainy" → "Miami, weather, rain"
+- User asks "Is that legal?" after assistant discussed "German employment law" → "German, employment law"
 
-**Output:** Return ONLY a comma-separated list of keywords, nothing else.
-**Language:** Extract keywords in the same language as they appeared in the conversation.
-"""
-    messages = create_contextual_messages(conversation_history, system_prompt)
+**Output:** Comma-separated keywords only."""
+    
+    messages = create_contextual_messages(recent_history, system_prompt)
     try:
-        response = robust_api_call(client, LLM_MODEL, messages, 0.0)
+        # PERFORMANCE OPTIMIZATION: Use fast model instead of main LLM
+        response = robust_api_call(client, FAST_MODEL, messages, 0.0, timeout=10)
         if response.choices and response.choices[0].message.content:
             keywords_text = response.choices[0].message.content.strip()
             keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
-            return keywords[:7]  # Limit to 7 keywords max
+            return keywords[:5]  # Reduced to 5 keywords max for faster processing
         return []
     except Exception as e:
         print(f"Error during context keyword extraction: {e}")
+        # PERFORMANCE OPTIMIZATION: Return empty list on error instead of crashing
         return []
 
 def evaluate_vector_store_quality(docs: list, last_question: str, min_docs: int = 3, min_avg_score: float = 0.3, high_quality_threshold: float = 0.7) -> dict:
