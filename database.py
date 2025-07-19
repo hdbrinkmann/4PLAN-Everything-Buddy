@@ -1,16 +1,87 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.exc import OperationalError, DisconnectionError
 from datetime import datetime
 import os
+import logging
 
 # Use environment variable for database path, fallback to default
 DB_PATH = os.getenv("DB_PATH", "./favorites.db")
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Create engine with connection pooling and reconnection settings
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=3600,   # Recycle connections every hour
+    echo=False  # Set to True for SQL debugging
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def get_db_with_retry():
+    """Get database session with automatic retry on connection failure."""
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            db = SessionLocal()
+            # Test the connection
+            db.execute("SELECT 1")
+            return db
+        except (OperationalError, DisconnectionError) as e:
+            retry_count += 1
+            logging.warning(f"Database connection failed (attempt {retry_count}/{max_retries}): {e}")
+            
+            if retry_count < max_retries:
+                # Close the failed session
+                try:
+                    db.close()
+                except:
+                    pass
+                
+                # Recreate the engine to force new connections
+                global engine
+                engine = create_engine(
+                    DATABASE_URL, 
+                    connect_args={"check_same_thread": False},
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
+                    echo=False
+                )
+                SessionLocal.configure(bind=engine)
+                
+                # Wait a bit before retrying
+                import time
+                time.sleep(0.5)
+            else:
+                logging.error(f"Failed to connect to database after {max_retries} attempts")
+                raise
+        except Exception as e:
+            logging.error(f"Unexpected database error: {e}")
+            try:
+                db.close()
+            except:
+                pass
+            raise
+    
+    raise Exception("Failed to establish database connection")
+
+def test_db_connection():
+    """Test database connection and return status."""
+    try:
+        db = get_db_with_retry()
+        try:
+            db.execute("SELECT 1")
+            return True, "Database connection OK"
+        finally:
+            db.close()
+    except Exception as e:
+        return False, f"Database connection failed: {str(e)}"
 
 class User(Base):
     __tablename__ = "users"
